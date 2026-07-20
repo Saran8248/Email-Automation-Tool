@@ -17,7 +17,18 @@ export default function Contacts({ contacts, fetchContacts, setNotification }) {
   
   // CSV Import State
   const [csvText, setCsvText] = useState('');
+  const [filename, setFilename] = useState('');
   const [importing, setImporting] = useState(false);
+
+  const handleFileSelect = (file) => {
+    if (!file) return;
+    setFilename(file.name);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setCsvText(e.target.result);
+    };
+    reader.readAsText(file);
+  };
 
   // Preview / Send states
   const [previewContact, setPreviewContact] = useState(null);
@@ -311,30 +322,78 @@ export default function Contacts({ contacts, fetchContacts, setNotification }) {
       {/* Bulk Upload Modal */}
       {isBulkOpen && (
         <div className="modal-overlay">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h4 className="modal-title">Bulk Import CSV</h4>
+          <div className="modal-content" style={{ maxWidth: '650px' }}>
+            <div className="modal-header" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
+              <h4 className="modal-title" style={{ fontSize: '1.5rem', fontWeight: '700' }}>Upload HR contact list</h4>
               <button className="icon-btn" onClick={() => setIsBulkOpen(false)}>&times;</button>
             </div>
-            <form onSubmit={handleBulkPaste}>
-              <div className="form-group">
-                <label>Paste CSV Raw Content (Must contain headers 'name' and 'email')</label>
-                <textarea
-                  required
-                  className="form-textarea"
-                  value={csvText}
-                  onChange={e => setCsvText(e.target.value)}
-                  placeholder="name,email,company,role,country&#10;Hiring Manager,hiring@stripe.com,Stripe,Senior Engineer,Netherlands&#10;Alex Smith,alex@airbnb.com,Airbnb,Software Developer,Germany"
-                  style={{ minHeight: '200px', fontFamily: 'monospace', fontSize: '0.85rem' }}
+            
+            <div style={{ marginTop: '1.5rem' }}>
+              <p className="page-subtitle" style={{ fontSize: '1rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+                Upload a <strong>CSV</strong> file. OutreachSphere auto-detects columns. Recognised headers:
+              </p>
+              
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+                {['name', 'email', 'company', 'title', 'industry', 'country'].map(h => (
+                  <span key={h} className="badge" style={{ backgroundColor: '#1e1b4b', color: '#a78bfa', padding: '0.4rem 0.8rem', fontSize: '0.85rem', textTransform: 'none' }}>
+                    {h}
+                  </span>
+                ))}
+              </div>
+
+              <div 
+                style={{
+                  border: '2px dashed var(--border-color)',
+                  borderRadius: '12px',
+                  padding: '3rem 2rem',
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  backgroundColor: 'rgba(21, 23, 31, 0.5)',
+                  transition: 'border-color 0.2s',
+                }}
+                onClick={() => document.getElementById('csvFileInput').click()}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => {
+                  e.preventDefault();
+                  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    handleFileSelect(e.dataTransfer.files[0]);
+                  }
+                }}
+              >
+                <input 
+                  type="file" 
+                  id="csvFileInput" 
+                  accept=".csv" 
+                  style={{ display: 'none' }} 
+                  onChange={e => {
+                    if (e.target.files && e.target.files[0]) {
+                      handleFileSelect(e.target.files[0]);
+                    }
+                  }}
                 />
+                <span style={{ fontSize: '2rem', display: 'block', marginBottom: '0.5rem' }}>📁</span>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '1rem' }}>
+                  {csvText ? `Selected file: ${filename || 'contacts.csv'}` : 'Click to choose a CSV file (or drag & drop here)'}
+                </span>
+                {csvText && (
+                  <span style={{ display: 'block', fontSize: '0.8rem', color: 'var(--success)', marginTop: '0.5rem' }}>
+                    File loaded successfully &bull; Ready to import
+                  </span>
+                )}
               </div>
-              <div className="modal-footer">
-                <button type="button" className="btn" onClick={() => setIsBulkOpen(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary" disabled={importing}>
-                  {importing ? 'Importing...' : 'Parse & Import'}
-                </button>
-              </div>
-            </form>
+            </div>
+
+            <div className="modal-footer" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1rem', marginTop: '2rem' }}>
+              <button type="button" className="btn" onClick={() => setIsBulkOpen(false)}>Close</button>
+              <button 
+                type="button" 
+                className="btn btn-primary" 
+                disabled={importing || !csvText}
+                onClick={handleBulkPaste}
+              >
+                {importing ? 'Importing...' : 'Import'}
+              </button>
+            </div>
           </div>
         </div>
       )}

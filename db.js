@@ -1,5 +1,4 @@
 import sqlite3 from 'sqlite3';
-import { promisify } from 'util';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -9,7 +8,6 @@ const __dirname = path.dirname(__filename);
 const dbPath = path.resolve(__dirname, 'database.db');
 const db = new sqlite3.Database(dbPath);
 
-// Promisify DB methods
 export const dbRun = (sql, params = []) => {
   return new Promise((resolve, reject) => {
     db.run(sql, params, function (err) {
@@ -37,7 +35,6 @@ export const dbAll = (sql, params = []) => {
   });
 };
 
-// Initialize Tables
 export async function initDb() {
   await dbRun(`
     CREATE TABLE IF NOT EXISTS settings (
@@ -46,6 +43,24 @@ export async function initDb() {
     )
   `);
 
+  // Clients (Candidates) Table
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS clients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      app_password TEXT,
+      enrollment_id TEXT,
+      mobile TEXT,
+      target_industries TEXT,
+      target_countries TEXT,
+      resume_text TEXT,
+      status TEXT DEFAULT 'Active',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Global HR Contacts (Recipients) Table
   await dbRun(`
     CREATE TABLE IF NOT EXISTS contacts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,19 +75,13 @@ export async function initDb() {
     )
   `);
 
-  await dbRun(`
-    CREATE TABLE IF NOT EXISTS resume (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      filename TEXT,
-      content TEXT,
-      custom_prompt TEXT,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
+  // Outreach Logs tracking Client and Contact mapping
   await dbRun(`
     CREATE TABLE IF NOT EXISTS logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_id INTEGER,
+      client_name TEXT,
+      client_email TEXT,
       contact_name TEXT,
       contact_email TEXT,
       company TEXT,
@@ -84,21 +93,8 @@ export async function initDb() {
     )
   `);
 
-  // Insert default system prompt and settings if not present
-  const defaultPrompt = `You are a professional candidate applying for jobs. Based on my resume and the recipient's details (Company, Industry, Role), craft a personalized, compelling, and concise cold outreach email.
-Keep the email structured, clear, and professional. Ensure it explains why I am interested in their company and how my skills align. Focus on a clear call-to-action (e.g., a brief call or review of my attached resume).
-
-Do not include subject line placeholders in the body; only output the clean body of the email.`;
-
-  await dbRun(`INSERT OR IGNORE INTO resume (id, filename, content, custom_prompt) VALUES (1, 'default.txt', '', ?)`, [defaultPrompt]);
-  
-  // Default program settings
+  // Insert default configurations
   const defaults = {
-    'smtp_host': 'smtp.gmail.com',
-    'smtp_port': '465',
-    'smtp_user': '',
-    'smtp_pass': '',
-    'sender_name': 'My Outreach Bot',
     'gemini_api_key': '',
     'daily_limit': '10',
     'send_hour': '12',
