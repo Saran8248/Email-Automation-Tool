@@ -1,6 +1,5 @@
 import express from 'express';
 import cors from 'cors';
-import multer from 'multer';
 import cron from 'node-cron';
 import nodemailer from 'nodemailer';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -18,17 +17,14 @@ const port = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// Set up file upload destination for resumes or CSVs
-const upload = multer({ dest: 'uploads/' });
-
-// Initialize Database on server start
+// Initialize Database
 initDb().then(() => {
   console.log('Database initialized successfully.');
 }).catch(err => {
   console.error('Failed to initialize database:', err);
 });
 
-// Helper: Get Settings as a single object
+// Helper: Get Settings Map
 async function getSettingsMap() {
   const rows = await dbAll('SELECT key, value FROM settings');
   const settings = {};
@@ -54,7 +50,6 @@ app.post('/api/settings', async (req, res) => {
     for (const [key, value] of Object.entries(settings)) {
       await dbRun('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [key, String(value)]);
     }
-    // Restart scheduler if active state/schedule changed
     await syncScheduler();
     res.json({ success: true, message: 'Settings saved successfully' });
   } catch (error) {
@@ -62,30 +57,55 @@ app.post('/api/settings', async (req, res) => {
   }
 });
 
-// ----------------- RESUME API -----------------
-app.get('/api/resume', async (req, res) => {
+// ----------------- CLIENTS (CANDIDATES) API -----------------
+app.get('/api/clients', async (req, res) => {
   try {
-    const row = await dbGet('SELECT * FROM resume WHERE id = 1');
-    res.json(row);
+    const rows = await dbAll('SELECT * FROM clients ORDER BY id DESC');
+    res.json(rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.post('/api/resume', async (req, res) => {
+app.post('/api/clients', async (req, res) => {
   try {
-    const { content, custom_prompt, filename } = req.body;
-    await dbRun(
-      'UPDATE resume SET content = ?, custom_prompt = ?, filename = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1',
-      [content, custom_prompt, filename || 'custom.txt']
+    const { name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, status } = req.body;
+    const result = await dbRun(
+      `INSERT INTO clients (name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, status) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, status || 'Active']
     );
-    res.json({ success: true, message: 'Resume updated successfully' });
+    res.json({ success: true, id: result.id });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// ----------------- CONTACTS API -----------------
+app.put('/api/clients/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, status } = req.body;
+    await dbRun(
+      `UPDATE clients SET name = ?, email = ?, app_password = ?, enrollment_id = ?, mobile = ?, 
+       target_industries = ?, target_countries = ?, resume_text = ?, status = ? WHERE id = ?`,
+      [name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, status, id]
+    );
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/clients/:id', async (req, res) => {
+  try {
+    await dbRun('DELETE FROM clients WHERE id = ?', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ----------------- HR CONTACTS API -----------------
 app.get('/api/contacts', async (req, res) => {
   try {
     const rows = await dbAll('SELECT * FROM contacts ORDER BY id DESC');
@@ -147,7 +167,7 @@ app.post('/api/contacts/bulk-paste', async (req, res) => {
         );
         imported++;
       } catch (err) {
-        failed++; // Duplicate email or SQL issue
+        failed++;
       }
     }
     res.json({ success: true, imported, failed });
@@ -156,7 +176,6 @@ app.post('/api/contacts/bulk-paste', async (req, res) => {
   }
 });
 
-// CSV parser implementation
 function parseCSV(text) {
   const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
   if (lines.length === 0) return [];
@@ -166,7 +185,6 @@ function parseCSV(text) {
 
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i];
-    // Splitting simple CSV fields (allowing values inside quotes containing commas)
     const matches = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(',');
     const values = matches.map(v => v.replace(/^["']|["']$/g, '').trim());
 
@@ -174,13 +192,14 @@ function parseCSV(text) {
     const emailIndex = headers.indexOf('email');
     const companyIndex = headers.indexOf('company');
     const roleIndex = headers.indexOf('role');
+    const titleIndex = headers.indexOf('title'); // Support 'title' header as 'role'
     const industryIndex = headers.indexOf('industry');
     const countryIndex = headers.indexOf('country');
 
     const name = values[nameIndex !== -1 ? nameIndex : 0] || '';
     const email = values[emailIndex !== -1 ? emailIndex : 1] || '';
     const company = values[companyIndex !== -1 ? companyIndex : 2] || '';
-    const role = values[roleIndex !== -1 ? roleIndex : 3] || '';
+    const role = values[roleIndex !== -1 ? roleIndex : (titleIndex !== -1 ? titleIndex : 3)] || '';
     const industry = values[industryIndex !== -1 ? industryIndex : 4] || '';
     const country = values[countryIndex !== -1 ? countryIndex : 5] || '';
 
@@ -194,14 +213,13 @@ function parseCSV(text) {
 // ----------------- OUTREACH LOGS API -----------------
 app.get('/api/logs', async (req, res) => {
   try {
-    const rows = await dbAll('SELECT * FROM logs ORDER BY id DESC LIMIT 500');
+    const rows = await dbAll('SELECT * FROM logs ORDER BY id DESC LIMIT 1000');
     res.json(rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Clear Logs
 app.post('/api/logs/clear', async (req, res) => {
   try {
     await dbRun('DELETE FROM logs');
@@ -213,63 +231,65 @@ app.post('/api/logs/clear', async (req, res) => {
 
 // ----------------- GENERATION & SENDING LOGIC -----------------
 
-// Generate preview
+// Generate preview for a client and contact
 app.post('/api/generate-preview', async (req, res) => {
   try {
-    const { contactId } = req.body;
+    const { clientId, contactId } = req.body;
+    const client = await dbGet('SELECT * FROM clients WHERE id = ?', [clientId]);
     const contact = await dbGet('SELECT * FROM contacts WHERE id = ?', [contactId]);
-    if (!contact) {
-      return res.status(404).json({ error: 'Contact not found' });
+    
+    if (!client || !contact) {
+      return res.status(404).json({ error: 'Client or Contact not found' });
     }
 
-    const resume = await dbGet('SELECT * FROM resume WHERE id = 1');
     const settings = await getSettingsMap();
-
-    const generated = await generateEmailContent(resume, contact, settings);
+    const generated = await generateEmailContent(client, contact, settings);
     res.json(generated);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Single email sender (Manual triggers)
+// Send custom email for a specific client to a contact
 app.post('/api/send-email', async (req, res) => {
-  const { contactId, customSubject, customBody } = req.body;
+  const { clientId, contactId, customSubject, customBody } = req.body;
   try {
+    const client = await dbGet('SELECT * FROM clients WHERE id = ?', [clientId]);
     const contact = await dbGet('SELECT * FROM contacts WHERE id = ?', [contactId]);
-    if (!contact) {
-      return res.status(404).json({ error: 'Contact not found' });
+    
+    if (!client || !contact) {
+      return res.status(404).json({ error: 'Client or Contact not found' });
     }
 
     const settings = await getSettingsMap();
     let subject = customSubject;
     let body = customBody;
 
-    // Generate if not provided
     if (!subject || !body) {
-      const resume = await dbGet('SELECT * FROM resume WHERE id = 1');
-      const generated = await generateEmailContent(resume, contact, settings);
+      const generated = await generateEmailContent(client, contact, settings);
       subject = generated.subject;
       body = generated.body;
     }
 
-    await sendRawEmail(contact.email, subject, body, settings);
+    await sendRawEmail(contact.email, subject, body, client);
 
-    // Save to success log
+    // Save to logs
     await dbRun(
-      'INSERT INTO logs (contact_name, contact_email, company, subject, body, status) VALUES (?, ?, ?, ?, ?, ?)',
-      [contact.name, contact.email, contact.company, subject, body, 'Sent']
+      `INSERT INTO logs (client_id, client_name, client_email, contact_name, contact_email, company, subject, body, status) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [client.id, client.name, client.email, contact.name, contact.email, contact.company, subject, body, 'Sent']
     );
 
     res.json({ success: true, message: 'Email sent successfully!' });
   } catch (error) {
-    // Log failure
     try {
+      const client = await dbGet('SELECT * FROM clients WHERE id = ?', [clientId]);
       const contact = await dbGet('SELECT * FROM contacts WHERE id = ?', [contactId]);
-      if (contact) {
+      if (client && contact) {
         await dbRun(
-          'INSERT INTO logs (contact_name, contact_email, company, subject, body, status, error_message) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [contact.name, contact.email, contact.company, customSubject || '', customBody || '', 'Failed', error.message]
+          `INSERT INTO logs (client_id, client_name, client_email, contact_name, contact_email, company, subject, body, status, error_message) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [client.id, client.name, client.email, contact.name, contact.email, contact.company, customSubject || '', customBody || '', 'Failed', error.message]
         );
       }
     } catch (dbErr) {
@@ -279,7 +299,7 @@ app.post('/api/send-email', async (req, res) => {
   }
 });
 
-// Trigger complete campaign (manual trigger of the daily list)
+// Trigger campaign for all clients
 app.post('/api/campaign/trigger', async (req, res) => {
   try {
     const results = await runDailyCampaign();
@@ -289,26 +309,50 @@ app.post('/api/campaign/trigger', async (req, res) => {
   }
 });
 
-// ----------------- CORE LOGIC UTILS -----------------
+// Test SMTP connection (takes client's parameters)
+app.post('/api/clients/test-smtp', async (req, res) => {
+  try {
+    const client = req.body; // containing name, email, app_password
+    await sendRawEmail(
+      client.email,
+      "OutreachSphere SMTP connection test success",
+      `Hello! This is a test email confirming that your email configuration for ${client.name} is working correctly.`,
+      client
+    );
+    res.json({ success: true, message: 'SMTP Test succeeded! Check your inbox.' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-async function generateEmailContent(resume, contact, settings) {
+// Core Gemini content generator
+async function generateEmailContent(client, contact, settings) {
   if (!settings.gemini_api_key) {
-    throw new Error('Gemini API key is not configured in settings.');
+    throw new Error('Gemini API key is not configured in Settings.');
   }
 
   const genAI = new GoogleGenerativeAI(settings.gemini_api_key);
-  // Using gemini-2.5-flash as default, or fall back to gemini-1.5-flash
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
+  const defaultPrompt = `You are a professional candidate applying for jobs. Based on my resume and the recipient's details (Company, Industry, Role), craft a personalized, compelling, and concise cold outreach email.
+Keep the email structured, clear, and professional. Ensure it explains why I am interested in their company and how my skills align. Focus on a clear call-to-action (e.g., a brief call or review of my attached resume).
+
+Do not include subject line placeholders in the body; only output the clean body of the email.`;
+
   const prompt = `
-${resume.custom_prompt}
+${defaultPrompt}
 
-My Resume Details:
+My Profile & Resume Details (Candidate):
+- Name: ${client.name}
+- Email: ${client.email}
+- Enrollment ID: ${client.enrollment_id || 'N/A'}
+- Mobile: ${client.mobile || 'N/A'}
 ---
-${resume.content || 'No resume details provided. Please generate a general professional introduction.'}
+Resume Content:
+${client.resume_text || 'No resume details provided. Please generate a general professional introduction.'}
 ---
 
-Recipient Details:
+Recipient Details (Hiring Contact):
 - Name: ${contact.name}
 - Email: ${contact.email}
 - Company: ${contact.company || 'Target Company'}
@@ -319,15 +363,14 @@ Recipient Details:
 Generate the email now. Return a JSON structure exactly like this:
 {
   "subject": "personalized subject line",
-  "body": "Hi ${contact.name},\\n\\n[professional message]\\n\\nBest regards,\\n[Sender]"
+  "body": "Hi ${contact.name},\\n\\n[professional cover letter style body of the email]\\n\\nBest regards,\\n${client.name}"
 }
-Ensure the output is valid JSON, no backticks or extra markdown wrap outside the JSON structure. If you must use code fences, use \`\`\`json.
+Ensure the output is valid JSON. If you use code fences, use \`\`\`json.
 `;
 
   const result = await model.generateContent(prompt);
   let text = result.response.text().trim();
   
-  // Sanitize text if Gemini returns markdown code blocks
   if (text.startsWith('```json')) {
     text = text.substring(7, text.lastIndexOf('```')).trim();
   } else if (text.startsWith('```')) {
@@ -337,46 +380,35 @@ Ensure the output is valid JSON, no backticks or extra markdown wrap outside the
   try {
     return JSON.parse(text);
   } catch (e) {
-    console.error('Gemini didn\'t return proper JSON. raw text:', text);
-    // Parse manually or fallback
-    const lines = text.split('\n');
-    let subject = `Job Application / Introduction`;
-    let body = text;
-    
-    // Check if subject can be parsed
-    const subMatch = text.match(/"subject"\s*:\s*"(.*?)"/);
-    const bodyMatch = text.match(/"body"\s*:\s*"(.*?)"/s);
-    if (subMatch) subject = subMatch[1];
-    if (bodyMatch) body = bodyMatch[1].replace(/\\n/g, '\n');
-    
-    return { subject, body };
+    console.error('Failed to parse Gemini response JSON. Text:', text);
+    let subject = `Application for ${contact.role || 'Software Role'} - ${client.name}`;
+    return { subject, body: text };
   }
 }
 
-async function sendRawEmail(to, subject, body, settings) {
-  if (!settings.smtp_user || !settings.smtp_pass) {
-    throw new Error('SMTP user or password not configured in settings.');
+async function sendRawEmail(to, subject, body, client) {
+  if (!client.email || !client.app_password) {
+    throw new Error(`Email address or Gmail App Password is not configured for candidate ${client.name}.`);
   }
 
+  // Gmail SMTP default configurations
   const transporter = nodemailer.createTransport({
-    host: settings.smtp_host || 'smtp.gmail.com',
-    port: parseInt(settings.smtp_port) || 465,
-    secure: (settings.smtp_port === '465'), // Port 465 is secure ssl
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
     auth: {
-      user: settings.smtp_user,
-      pass: settings.smtp_pass,
+      user: client.email,
+      pass: client.app_password,
     },
-    // Adding timeout values to prevent indefinite hangs
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 20000,
   });
 
-  // Convert raw body text newline to HTML breaks
   const htmlBody = body.replace(/\n/g, '<br>');
 
   const mailOptions = {
-    from: `"${settings.sender_name}" <${settings.smtp_user}>`,
+    from: `"${client.name}" <${client.email}>`,
     to,
     subject,
     html: `<div style="font-family: Arial, sans-serif; font-size: 14px; color: #333; line-height: 1.6;">${htmlBody}</div>`,
@@ -385,84 +417,95 @@ async function sendRawEmail(to, subject, body, settings) {
   return transporter.sendMail(mailOptions);
 }
 
-// SMTP Connection Test API
-app.post('/api/settings/test-smtp', async (req, res) => {
-  try {
-    const settings = req.body;
-    await sendRawEmail(
-      settings.smtp_user,
-      "SMTP connection test success",
-      "Hello! This is a test email confirming that your email automation settings are configured correctly.",
-      settings
-    );
-    res.json({ success: true, message: 'SMTP Test email sent successfully to yourself!' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Run Daily Campaign Logic
+// Global scheduler campaign run
 async function runDailyCampaign() {
-  console.log("Running scheduled email campaign...");
+  console.log("Running scheduled multi-candidate email campaign...");
   const settings = await getSettingsMap();
-  const limit = parseInt(settings.daily_limit) || 10;
+  const limitPerCandidate = parseInt(settings.daily_limit) || 10;
   
-  if (!settings.gemini_api_key || !settings.smtp_user || !settings.smtp_pass) {
-    console.log("Campaign aborted: API key or SMTP config missing.");
-    return { success: false, reason: "Configuration incomplete" };
+  if (!settings.gemini_api_key) {
+    console.log("Campaign aborted: Gemini API key is missing.");
+    return { success: false, reason: "Gemini API key missing" };
   }
 
-  // Get active contacts who haven't received an email recently (we can just check if they are "Active")
-  // For a complete automation, we can pick 'Active' contacts up to the daily limit,
-  // then change their status to 'Sent' (or keep track using logs) so we don't double email.
-  // Let's select active contacts who do not have a successful entry in the log table.
-  const activeContacts = await dbAll(`
-    SELECT * FROM contacts 
-    WHERE status = 'Active' 
-    AND email NOT IN (SELECT contact_email FROM logs WHERE status = 'Sent')
-    LIMIT ?
-  `, [limit]);
-
-  if (activeContacts.length === 0) {
-    console.log("No contacts left to email today.");
-    return { success: true, sent: 0, skipped: 0, message: "No active, unsent contacts found." };
+  // Get active candidates
+  const activeClients = await dbAll("SELECT * FROM clients WHERE status = 'Active'");
+  if (activeClients.length === 0) {
+    return { success: true, sent: 0, message: "No active candidates found." };
   }
 
-  const resume = await dbGet('SELECT * FROM resume WHERE id = 1');
-  let sentCount = 0;
-  let failCount = 0;
+  // Get all active HR contacts
+  const allContacts = await dbAll("SELECT * FROM contacts WHERE status = 'Active'");
+  if (allContacts.length === 0) {
+    return { success: true, sent: 0, message: "No active HR contacts found." };
+  }
 
-  for (const contact of activeContacts) {
+  let totalSent = 0;
+  let totalFailed = 0;
+
+  for (const client of activeClients) {
+    // Determine matches based on client's target industries and target countries
+    let targetCountries = [];
+    let targetIndustries = [];
+    
     try {
-      // 1. Generate Content
-      const generated = await generateEmailContent(resume, contact, settings);
-      
-      // 2. Send Email
-      await sendRawEmail(contact.email, generated.subject, generated.body, settings);
-      
-      // 3. Log Success
-      await dbRun(
-        'INSERT INTO logs (contact_name, contact_email, company, subject, body, status) VALUES (?, ?, ?, ?, ?, ?)',
-        [contact.name, contact.email, contact.company, generated.subject, generated.body, 'Sent']
-      );
-      
-      // Optionally update contact status so we know they were emailed
-      // await dbRun('UPDATE contacts SET status = "Emailed" WHERE id = ?', [contact.id]);
-      
-      sentCount++;
-      // Wait a few seconds between sends to avoid rate limits
-      await new Promise(r => setTimeout(r, 3000));
-    } catch (error) {
-      console.error(`Failed to send email to ${contact.email}:`, error);
-      failCount++;
-      await dbRun(
-        'INSERT INTO logs (contact_name, contact_email, company, subject, body, status, error_message) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [contact.name, contact.email, contact.company, '', '', 'Failed', error.message]
-      );
+      if (client.target_countries) targetCountries = JSON.parse(client.target_countries);
+    } catch(e) {}
+    try {
+      if (client.target_industries) targetIndustries = JSON.parse(client.target_industries);
+    } catch(e) {}
+
+    // Filter contacts matching targets and not emailed by this client yet
+    const matchingContacts = allContacts.filter(contact => {
+      // Country match (if candidate target is configured)
+      if (targetCountries.length > 0 && contact.country) {
+        if (!targetCountries.includes(contact.country)) return false;
+      }
+      // Industry match (if candidate target is configured)
+      if (targetIndustries.length > 0 && contact.industry) {
+        if (!targetIndustries.includes(contact.industry)) return false;
+      }
+      return true;
+    });
+
+    // Query DB logs to exclude already emailed contacts by this client
+    const alreadySentLogs = await dbAll(
+      "SELECT contact_email FROM logs WHERE client_id = ? AND status = 'Sent'", 
+      [client.id]
+    );
+    const sentEmailsList = alreadySentLogs.map(l => l.contact_email);
+    
+    const candidateTodoContacts = matchingContacts.filter(
+      contact => !sentEmailsList.includes(contact.email)
+    ).slice(0, limitPerCandidate);
+
+    console.log(`Candidate ${client.name} has ${candidateTodoContacts.length} target contacts to email today.`);
+
+    for (const contact of candidateTodoContacts) {
+      try {
+        const generated = await generateEmailContent(client, contact, settings);
+        await sendRawEmail(contact.email, generated.subject, generated.body, client);
+        
+        await dbRun(
+          `INSERT INTO logs (client_id, client_name, client_email, contact_name, contact_email, company, subject, body, status) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [client.id, client.name, client.email, contact.name, contact.email, contact.company, generated.subject, generated.body, 'Sent']
+        );
+        totalSent++;
+        await new Promise(r => setTimeout(r, 4000)); // Delay between sends
+      } catch (error) {
+        console.error(`Failed to send email for ${client.name} to ${contact.email}:`, error);
+        totalFailed++;
+        await dbRun(
+          `INSERT INTO logs (client_id, client_name, client_email, contact_name, contact_email, company, subject, body, status, error_message) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [client.id, client.name, client.email, contact.name, contact.email, contact.company, '', '', 'Failed', error.message]
+        );
+      }
     }
   }
 
-  return { success: true, sent: sentCount, failed: failCount };
+  return { success: true, sent: totalSent, failed: totalFailed };
 }
 
 // ----------------- SCHEDULER SYSTEM -----------------
@@ -481,7 +524,6 @@ async function syncScheduler() {
   }
 
   if (isActive) {
-    // Cron pattern: minute hour * * * (daily at specified time)
     const cronPattern = `${minute} ${hour} * * *`;
     console.log(`Setting up daily scheduler with pattern: "${cronPattern}"`);
     activeCronJob = cron.schedule(cronPattern, async () => {
@@ -495,13 +537,11 @@ async function syncScheduler() {
   }
 }
 
-// Sync scheduler on boot after DB is ready
 setTimeout(() => {
   syncScheduler().catch(err => console.error("Failed to start scheduler on load:", err));
 }, 2000);
 
-// ----------------- FRONTEND SERVING -----------------
-// Serve production Vite assets if they exist
+// Serve static build files
 const distPath = path.join(__dirname, 'dist');
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
@@ -510,11 +550,10 @@ if (fs.existsSync(distPath)) {
   });
 } else {
   app.get('/', (req, res) => {
-    res.send('API Server is running. Frontend dev server is separate in development.');
+    res.send('API Server is running.');
   });
 }
 
-// Start Server
 app.listen(port, () => {
   console.log(`Email Automation Server is listening at http://localhost:${port}`);
 });

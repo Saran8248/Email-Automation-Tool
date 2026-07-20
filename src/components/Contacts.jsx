@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-export default function Contacts({ contacts, fetchContacts, setNotification }) {
+export default function Contacts({ contacts, fetchContacts, setNotification, clients = [] }) {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isBulkOpen, setIsBulkOpen] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -131,7 +131,21 @@ export default function Contacts({ contacts, fetchContacts, setNotification }) {
     }
   };
 
-  const triggerPreview = async (contact) => {
+  const [selectedClientId, setSelectedClientId] = useState('');
+
+  const triggerPreview = async (contact, specificClientId = null) => {
+    let activeClientId = specificClientId;
+    
+    if (!activeClientId) {
+      const activeClients = clients.filter(c => c.status === 'Active');
+      if (activeClients.length === 0) {
+        setNotification({ message: 'No active candidates available. Please add or activate a candidate profile.', type: 'error' });
+        return;
+      }
+      activeClientId = activeClients[0].id;
+    }
+    
+    setSelectedClientId(activeClientId);
     setPreviewContact(contact);
     setIsPreviewOpen(true);
     setGeneratingPreview(true);
@@ -141,7 +155,7 @@ export default function Contacts({ contacts, fetchContacts, setNotification }) {
       const res = await fetch('/api/generate-preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contactId: contact.id })
+        body: JSON.stringify({ clientId: activeClientId, contactId: contact.id })
       });
       const data = await res.json();
       if (res.ok) {
@@ -159,7 +173,7 @@ export default function Contacts({ contacts, fetchContacts, setNotification }) {
   };
 
   const sendCustomEmail = async () => {
-    if (!previewContact) return;
+    if (!previewContact || !selectedClientId) return;
     setSendingEmail(true);
 
     try {
@@ -167,6 +181,7 @@ export default function Contacts({ contacts, fetchContacts, setNotification }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          clientId: selectedClientId,
           contactId: previewContact.id,
           customSubject: previewData.subject,
           customBody: previewData.body
@@ -412,6 +427,21 @@ export default function Contacts({ contacts, fetchContacts, setNotification }) {
               </div>
             ) : (
               <div>
+                <div className="form-group" style={{ marginBottom: '1rem' }}>
+                  <label>Pitching Candidate Profile</label>
+                  <select 
+                    className="form-select"
+                    value={selectedClientId}
+                    onChange={e => triggerPreview(previewContact, e.target.value)}
+                  >
+                    <option value="">-- Choose Candidate --</option>
+                    {clients.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.email})
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <p className="page-subtitle" style={{ marginBottom: '1rem' }}>
                   Target: <strong>{previewContact?.name}</strong> ({previewContact?.email}) at {previewContact?.company || 'Direct'}
                 </p>

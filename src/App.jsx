@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import Dashboard from './components/Dashboard.jsx';
 import Contacts from './components/Contacts.jsx';
-import Resume from './components/Resume.jsx';
+import Clients from './components/Clients.jsx';
 import Settings from './components/Settings.jsx';
 import Logs from './components/Logs.jsx';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [contacts, setContacts] = useState([]);
+  const [clients, setClients] = useState([]);
   const [logs, setLogs] = useState([]);
   const [notification, setNotification] = useState(null);
   const [triggerInProgress, setTriggerInProgress] = useState(false);
@@ -15,9 +16,9 @@ export default function App() {
   useEffect(() => {
     fetchContacts();
     fetchLogs();
+    fetchClients();
   }, []);
 
-  // Auto clear notifications
   useEffect(() => {
     if (notification) {
       const timer = setTimeout(() => {
@@ -39,6 +40,18 @@ export default function App() {
     }
   };
 
+  const fetchClients = async () => {
+    try {
+      const res = await fetch('/api/clients');
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setClients(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch clients:', err);
+    }
+  };
+
   const fetchLogs = async () => {
     try {
       const res = await fetch('/api/logs');
@@ -53,7 +66,7 @@ export default function App() {
 
   const triggerCampaign = async () => {
     setTriggerInProgress(true);
-    setNotification({ message: 'Starting email outreach campaign...', type: 'success' });
+    setNotification({ message: 'Starting email outreach campaign for all active candidates...', type: 'success' });
     try {
       const res = await fetch('/api/campaign/trigger', { method: 'POST' });
       const data = await res.json();
@@ -64,6 +77,7 @@ export default function App() {
         });
         fetchLogs();
         fetchContacts();
+        fetchClients();
       } else {
         setNotification({ message: data.reason || 'Campaign run incomplete. Check config.', type: 'error' });
       }
@@ -74,13 +88,13 @@ export default function App() {
     }
   };
 
-  // Dynamically calculate stats
-  const activeCount = contacts.filter(c => c.status === 'Active').length;
+  // Calculate dynamic stats
+  const activeCount = clients.filter(c => c.status === 'Active').length;
   const sentCount = logs.filter(l => l.status === 'Sent').length;
   const failedCount = logs.filter(l => l.status === 'Failed').length;
 
   const stats = {
-    total: contacts.length,
+    total: clients.length,
     active: activeCount,
     sent: sentCount,
     failed: failedCount
@@ -96,7 +110,7 @@ export default function App() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
             </svg>
           </div>
-          <h1 className="logo-text">Connection</h1>
+          <h1 className="logo-text">OutreachSphere</h1>
         </div>
 
         <nav>
@@ -114,6 +128,17 @@ export default function App() {
             </li>
             <li>
               <a 
+                className={`nav-item ${activeTab === 'clients' ? 'active' : ''}`}
+                onClick={() => setActiveTab('clients')}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
+                </svg>
+                Clients
+              </a>
+            </li>
+            <li>
+              <a 
                 className={`nav-item ${activeTab === 'contacts' ? 'active' : ''}`}
                 onClick={() => setActiveTab('contacts')}
               >
@@ -121,17 +146,6 @@ export default function App() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.109A2.25 2.25 0 0 1 12.75 21.5h-1.5a2.25 2.25 0 0 1-2.25-2.263V19.13m4.5-3.07a9.3 9.3 0 0 0-4.5-1.229 9.302 9.302 0 0 0-4.5 1.23M13.5 8.25a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0ZM5.25 8.25a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
                 </svg>
                 HR Contacts
-              </a>
-            </li>
-            <li>
-              <a 
-                className={`nav-item ${activeTab === 'resume' ? 'active' : ''}`}
-                onClick={() => setActiveTab('resume')}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-                </svg>
-                Resume & Profile
               </a>
             </li>
             <li>
@@ -163,7 +177,6 @@ export default function App() {
 
       {/* Main Panel */}
       <main className="main-content">
-        {/* Render notification banners */}
         {notification && (
           <div className={`notification notification-${notification.type}`}>
             <span>{notification.message}</span>
@@ -179,21 +192,20 @@ export default function App() {
         <header className="page-header">
           <h2 className="page-title">
             {activeTab === 'dashboard' && 'Dashboard Overview'}
+            {activeTab === 'clients' && 'Clients / Candidate Roster'}
             {activeTab === 'contacts' && 'HR Contacts Manager'}
-            {activeTab === 'resume' && 'Resume & Personalization Profile'}
             {activeTab === 'logs' && 'Campaign Logs History'}
             {activeTab === 'settings' && 'Outreach Settings'}
           </h2>
           <p className="page-subtitle">
             {activeTab === 'dashboard' && 'Monitor your daily cold outreach campaigns and target statistics.'}
+            {activeTab === 'clients' && 'Search, filter & manage your client roster and resumes.'}
             {activeTab === 'contacts' && 'Add, edit, or import placement and recruiting contacts.'}
-            {activeTab === 'resume' && 'Add resume details and customize AI personalization rules.'}
             {activeTab === 'logs' && 'Trace the success rate of emails delivered to hiring managers.'}
             {activeTab === 'settings' && 'Configure SMTP, Gemini API Credentials, and active schedulers.'}
           </p>
         </header>
 
-        {/* Dynamic View Panels */}
         {activeTab === 'dashboard' && (
           <Dashboard 
             stats={stats} 
@@ -202,16 +214,17 @@ export default function App() {
             triggerInProgress={triggerInProgress} 
           />
         )}
+        {activeTab === 'clients' && (
+          <Clients 
+            setNotification={setNotification} 
+          />
+        )}
         {activeTab === 'contacts' && (
           <Contacts 
             contacts={contacts} 
             fetchContacts={fetchContacts} 
             setNotification={setNotification} 
-          />
-        )}
-        {activeTab === 'resume' && (
-          <Resume 
-            setNotification={setNotification} 
+            clients={clients}
           />
         )}
         {activeTab === 'logs' && (
