@@ -55,10 +55,18 @@ export async function initDb() {
       target_industries TEXT,
       target_countries TEXT,
       resume_text TEXT,
+      email_template TEXT,
       status TEXT DEFAULT 'Active',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // Add email_template column if it doesn't exist (for existing databases)
+  try {
+    await dbRun(`ALTER TABLE clients ADD COLUMN email_template TEXT`);
+  } catch (err) {
+    // Ignore error if column already exists
+  }
 
   // Global HR Contacts (Recipients) Table
   await dbRun(`

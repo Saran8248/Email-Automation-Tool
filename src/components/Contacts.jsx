@@ -1,5 +1,19 @@
 import React, { useState } from 'react';
 
+const INDUSTRIES_LIST = [
+  'E-commerce & Retail',
+  'Manufacturing & Automotive',
+  'Logistics & Supply Chain',
+  'Healthcare & Life Sciences',
+  'Telecom',
+  'FMCG & Consumer Goods',
+  'Energy & Utilities',
+  'Construction, Infrastructure & Real Estate',
+  'Technology & Consulting'
+];
+
+const COUNTRIES_LIST = ['Germany', 'UAE', 'Netherlands', 'Australia'];
+
 export default function Contacts({ contacts, fetchContacts, setNotification, clients = [] }) {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isBulkOpen, setIsBulkOpen] = useState(false);
@@ -311,11 +325,21 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="form-group">
                   <label>Industry</label>
-                  <input type="text" className="form-input" value={industry} onChange={e => setIndustry(e.target.value)} placeholder="e.g. FinTech" />
+                  <select className="form-select" value={industry} onChange={e => setIndustry(e.target.value)}>
+                    <option value="">-- Select Industry --</option>
+                    {INDUSTRIES_LIST.map(ind => (
+                      <option key={ind} value={ind}>{ind}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="form-group">
                   <label>Country</label>
-                  <input type="text" className="form-input" value={country} onChange={e => setCountry(e.target.value)} placeholder="e.g. Germany" />
+                  <select className="form-select" value={country} onChange={e => setCountry(e.target.value)}>
+                    <option value="">-- Select Country --</option>
+                    {COUNTRIES_LIST.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
               <div className="form-group">

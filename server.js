@@ -7,6 +7,11 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { initDb, dbRun, dbGet, dbAll } from './db.js';
+import multer from 'multer';
+import { PDFParse } from 'pdf-parse';
+
+const upload = multer({ storage: multer.memoryStorage() });
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -69,11 +74,11 @@ app.get('/api/clients', async (req, res) => {
 
 app.post('/api/clients', async (req, res) => {
   try {
-    const { name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, status } = req.body;
+    const { name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, email_template, status } = req.body;
     const result = await dbRun(
-      `INSERT INTO clients (name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, status) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, status || 'Active']
+      `INSERT INTO clients (name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, email_template, status) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, email_template, status || 'Active']
     );
     res.json({ success: true, id: result.id });
   } catch (error) {
@@ -84,11 +89,11 @@ app.post('/api/clients', async (req, res) => {
 app.put('/api/clients/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, status } = req.body;
+    const { name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, email_template, status } = req.body;
     await dbRun(
       `UPDATE clients SET name = ?, email = ?, app_password = ?, enrollment_id = ?, mobile = ?, 
-       target_industries = ?, target_countries = ?, resume_text = ?, status = ? WHERE id = ?`,
-      [name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, status, id]
+       target_industries = ?, target_countries = ?, resume_text = ?, email_template = ?, status = ? WHERE id = ?`,
+      [name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, email_template, status, id]
     );
     res.json({ success: true });
   } catch (error) {
@@ -100,6 +105,71 @@ app.delete('/api/clients/:id', async (req, res) => {
   try {
     await dbRun('DELETE FROM clients WHERE id = ?', [req.params.id]);
     res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PDF Parsing Route
+app.post('/api/parse-pdf', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+    const parser = new PDFParse({ data: req.file.buffer });
+    const result = await parser.getText();
+    res.json({ success: true, text: result.text });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// AI Template Generation Route
+app.post('/api/generate-template', async (req, res) => {
+  try {
+    const { name, resume_text } = req.body;
+    const settings = await getSettingsMap();
+    if (!settings.gemini_api_key) {
+      return res.status(400).json({ error: 'Gemini API key is not configured in Settings.' });
+    }
+    
+    const genAI = new GoogleGenerativeAI(settings.gemini_api_key);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    
+    const prompt = `
+You are an expert career advisor and cold outreach specialist. 
+Based on the candidate's resume, craft a highly professional, polite, and persuasive outreach email template that can be sent to Hiring Managers/HR contacts.
+The template MUST use the following placeholders so we can dynamically personalize it later:
+- {contact_name} for the recipient's name
+- {company_name} for the recipient's company name
+- {role} for the recipient's job role / title
+- {industry} for the recipient's industry
+- {candidate_name} for the candidate's name (${name || 'Candidate'})
+- {candidate_email} for the candidate's email
+
+Keep the email concise, structured, and easy to read. Write a compelling subject and body.
+Return a JSON structure exactly like this:
+{
+  "subject": "Interested in roles at {company_name} - {candidate_name}",
+  "body": "Hi {contact_name},\\n\\n[professional, compelling email content mentioning details like {role} and {industry}]\\n\\nBest regards,\\n{candidate_name}"
+}
+Ensure the output is valid JSON. If you use markdown code fences, use \`\`\`json.
+
+Candidate Resume Content:
+${resume_text || 'General candidate profile.'}
+`;
+
+    const result = await model.generateContent(prompt);
+    let text = result.response.text().trim();
+    
+    if (text.startsWith('```json')) {
+      text = text.substring(7, text.lastIndexOf('```')).trim();
+    } else if (text.startsWith('```')) {
+      text = text.substring(3, text.lastIndexOf('```')).trim();
+    }
+
+    const generated = JSON.parse(text);
+    res.json({ success: true, template: generated });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -177,31 +247,57 @@ app.post('/api/contacts/bulk-paste', async (req, res) => {
 });
 
 function parseCSV(text) {
-  const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(line => line.length > 0);
   if (lines.length === 0) return [];
   
-  const headers = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, '').toLowerCase());
+  // Detect separator: count commas vs semicolons in the first line
+  const firstLine = lines[0];
+  const commaCount = (firstLine.match(/,/g) || []).length;
+  const semicolonCount = (firstLine.match(/;/g) || []).length;
+  const sep = semicolonCount > commaCount ? ';' : ',';
+
+  // Helper to parse a single CSV line respecting quotes and keeping empty fields
+  const parseLine = (line, separator) => {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"' || char === "'") {
+        inQuotes = !inQuotes;
+      } else if (char === separator && !inQuotes) {
+        result.push(current.trim().replace(/^["']|["']$/g, ''));
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    result.push(current.trim().replace(/^["']|["']$/g, ''));
+    return result;
+  };
+
+  const headers = parseLine(lines[0], sep).map(h => h.toLowerCase());
   const contacts = [];
 
+  const nameIndex = headers.indexOf('name');
+  const emailIndex = headers.indexOf('email');
+  const companyIndex = headers.indexOf('company');
+  const roleIndex = headers.indexOf('role');
+  const titleIndex = headers.indexOf('title');
+  const industryIndex = headers.indexOf('industry');
+  const countryIndex = headers.indexOf('country');
+
   for (let i = 1; i < lines.length; i++) {
-    const line = lines[i];
-    const matches = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(',');
-    const values = matches.map(v => v.replace(/^["']|["']$/g, '').trim());
-
-    const nameIndex = headers.indexOf('name');
-    const emailIndex = headers.indexOf('email');
-    const companyIndex = headers.indexOf('company');
-    const roleIndex = headers.indexOf('role');
-    const titleIndex = headers.indexOf('title'); // Support 'title' header as 'role'
-    const industryIndex = headers.indexOf('industry');
-    const countryIndex = headers.indexOf('country');
-
+    const values = parseLine(lines[i], sep);
+    
+    // Extract by index if found, else default to fallback index
     const name = values[nameIndex !== -1 ? nameIndex : 0] || '';
     const email = values[emailIndex !== -1 ? emailIndex : 1] || '';
-    const company = values[companyIndex !== -1 ? companyIndex : 2] || '';
-    const role = values[roleIndex !== -1 ? roleIndex : (titleIndex !== -1 ? titleIndex : 3)] || '';
-    const industry = values[industryIndex !== -1 ? industryIndex : 4] || '';
-    const country = values[countryIndex !== -1 ? countryIndex : 5] || '';
+    const company = (companyIndex !== -1 && values[companyIndex] !== undefined) ? values[companyIndex] : (values[2] || '');
+    const role = (roleIndex !== -1 && values[roleIndex] !== undefined) ? values[roleIndex] : 
+                 ((titleIndex !== -1 && values[titleIndex] !== undefined) ? values[titleIndex] : (values[3] || ''));
+    const industry = (industryIndex !== -1 && values[industryIndex] !== undefined) ? values[industryIndex] : (values[4] || '');
+    const country = (countryIndex !== -1 && values[countryIndex] !== undefined) ? values[countryIndex] : (values[5] || '');
 
     if (name && email && email.includes('@')) {
       contacts.push({ name, email, company, role, industry, country });
@@ -327,6 +423,30 @@ app.post('/api/clients/test-smtp', async (req, res) => {
 
 // Core Gemini content generator
 async function generateEmailContent(client, contact, settings) {
+  if (client.email_template) {
+    try {
+      const template = JSON.parse(client.email_template);
+      if (template.subject && template.body) {
+        const replacePlaceholders = (text) => {
+          return text
+            .replace(/{contact_name}/g, contact.name || 'Hiring Manager')
+            .replace(/{company_name}/g, contact.company || 'your company')
+            .replace(/{role}/g, contact.role || 'Hiring Team')
+            .replace(/{industry}/g, contact.industry || 'your industry')
+            .replace(/{candidate_name}/g, client.name || '')
+            .replace(/{candidate_email}/g, client.email || '')
+            .replace(/{candidate_mobile}/g, client.mobile || '');
+        };
+        return {
+          subject: replacePlaceholders(template.subject),
+          body: replacePlaceholders(template.body)
+        };
+      }
+    } catch (e) {
+      console.error('Failed to parse or use candidate email template:', e);
+    }
+  }
+
   if (!settings.gemini_api_key) {
     throw new Error('Gemini API key is not configured in Settings.');
   }

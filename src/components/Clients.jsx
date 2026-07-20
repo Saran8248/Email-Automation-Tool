@@ -28,6 +28,9 @@ export default function Clients({ setNotification }) {
   const [selectedIndustries, setSelectedIndustries] = useState([]);
   const [selectedCountries, setSelectedCountries] = useState([]);
   const [resumeText, setResumeText] = useState('');
+  const [emailTemplateSubject, setEmailTemplateSubject] = useState('');
+  const [emailTemplateBody, setEmailTemplateBody] = useState('');
+  const [generatingTemplate, setGeneratingTemplate] = useState(false);
   const [status, setStatus] = useState('Active');
   const [testingSmtp, setTestingSmtp] = useState(false);
 
@@ -57,6 +60,8 @@ export default function Clients({ setNotification }) {
     setSelectedIndustries([]);
     setSelectedCountries([]);
     setResumeText('');
+    setEmailTemplateSubject('');
+    setEmailTemplateBody('');
     setStatus('Active');
     setIsOpen(true);
   };
@@ -70,6 +75,15 @@ export default function Clients({ setNotification }) {
     setMobile(client.mobile || '');
     setStatus(client.status || 'Active');
     setResumeText(client.resume_text || '');
+    
+    try {
+      const template = JSON.parse(client.email_template);
+      setEmailTemplateSubject(template.subject || '');
+      setEmailTemplateBody(template.body || '');
+    } catch(e) {
+      setEmailTemplateSubject('');
+      setEmailTemplateBody('');
+    }
     
     try {
       setSelectedIndustries(JSON.parse(client.target_industries) || []);
@@ -114,6 +128,7 @@ export default function Clients({ setNotification }) {
       target_industries: JSON.stringify(selectedIndustries),
       target_countries: JSON.stringify(selectedCountries),
       resume_text: resumeText,
+      email_template: JSON.stringify({ subject: emailTemplateSubject, body: emailTemplateBody }),
       status
     };
 
@@ -180,15 +195,68 @@ export default function Clients({ setNotification }) {
     }
   };
 
-  const handleUploadResumeTextFile = (file) => {
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setResumeText(e.target.result);
-      setNotification({ message: 'Resume text loaded from file!', type: 'success' });
-    };
-    reader.readAsText(file);
+  const handleGenerateTemplate = async (customResumeText = null) => {
+    const textToUse = customResumeText !== null ? customResumeText : resumeText;
+    if (!textToUse) {
+      setNotification({ message: 'Please enter or upload resume details first.', type: 'error' });
+      return;
+    }
+    setGeneratingTemplate(true);
+    try {
+      const res = await fetch('/api/generate-template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, resume_text: textToUse })
+      });
+      const data = await res.json();
+      if (data.success && data.template) {
+        setEmailTemplateSubject(data.template.subject || '');
+        setEmailTemplateBody(data.template.body || '');
+        setNotification({ message: 'AI email template generated successfully!', type: 'success' });
+      } else {
+        setNotification({ message: data.error || 'Failed to generate template', type: 'error' });
+      }
+    } catch (err) {
+      setNotification({ message: err.message, type: 'error' });
+    } finally {
+      setGeneratingTemplate(false);
+    }
   };
+
+  const handleUploadResumeTextFile = async (file) => {
+    if (!file) return;
+    if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+      setNotification({ message: 'Parsing PDF file... Please wait.', type: 'success' });
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        const res = await fetch('/api/parse-pdf', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (data.success) {
+          setResumeText(data.text);
+          setNotification({ message: 'Resume text loaded. Generating AI email template...', type: 'success' });
+          await handleGenerateTemplate(data.text);
+        } else {
+          setNotification({ message: data.error || 'Failed to parse PDF resume', type: 'error' });
+        }
+      } catch (err) {
+        setNotification({ message: err.message, type: 'error' });
+      }
+    } else {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const content = e.target.result;
+        setResumeText(content);
+        setNotification({ message: 'Resume text loaded. Generating AI email template...', type: 'success' });
+        await handleGenerateTemplate(content);
+      };
+      reader.readAsText(file);
+    }
+  };
+
 
   const loadDemoCandidate = () => {
     setName('Munish Kanna S');
@@ -373,12 +441,13 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
                   <input 
                     type="file" 
                     id="resumeTextInput" 
-                    accept=".txt,.md" 
+                    accept=".txt,.md,.pdf" 
                     style={{ display: 'none' }}
+                    onClick={e => { e.target.value = null; }}
                     onChange={e => handleUploadResumeTextFile(e.target.files[0])}
                   />
                   <button type="button" className="btn btn-sm" onClick={() => document.getElementById('resumeTextInput').click()}>
-                    📎 Choose .txt / .md Resume File
+                    📎 Choose .txt / .md / .pdf Resume File
                   </button>
                   <span className="page-subtitle" style={{ fontSize: '0.8rem' }}>or paste details directly below:</span>
                 </div>
@@ -389,6 +458,38 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
                   placeholder="Paste work experience, skills, and summary details here..."
                   style={{ minHeight: '150px', fontSize: '0.85rem' }}
                 />
+              </div>
+              <div className="form-group" style={{ marginTop: '1.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <label style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 'bold' }}>AI OUTREACH EMAIL TEMPLATE</label>
+                  <button type="button" className="btn btn-sm" onClick={() => handleGenerateTemplate(null)} disabled={generatingTemplate || !resumeText}>
+                    {generatingTemplate ? 'Generating template...' : '⚡ Generate template with AI'}
+                  </button>
+                </div>
+                <p className="page-subtitle" style={{ fontSize: '0.8rem', marginBottom: '1rem' }}>
+                  Use placeholders to personalize: <code>{`{contact_name}`}</code>, <code>{`{company_name}`}</code>, <code>{`{role}`}</code>, <code>{`{industry}`}</code>, <code>{`{candidate_name}`}</code>, <code>{`{candidate_email}`}</code>
+                </p>
+                <div className="form-group" style={{ marginBottom: '1rem' }}>
+                  <label style={{ fontSize: '0.8rem' }}>Subject Template</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={emailTemplateSubject}
+                    onChange={e => setEmailTemplateSubject(e.target.value)}
+                    placeholder="e.g. Application for {role} at {company_name} - {candidate_name}"
+                    style={{ fontSize: '0.85rem' }}
+                  />
+                </div>
+                <div className="form-group">
+                  <label style={{ fontSize: '0.8rem' }}>Body Template</label>
+                  <textarea
+                    className="form-textarea"
+                    value={emailTemplateBody}
+                    onChange={e => setEmailTemplateBody(e.target.value)}
+                    placeholder="Hi {contact_name}, ..."
+                    style={{ minHeight: '180px', fontSize: '0.85rem' }}
+                  />
+                </div>
               </div>
 
               <div className="modal-footer" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1rem', marginTop: '2rem' }}>
