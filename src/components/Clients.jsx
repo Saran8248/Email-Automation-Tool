@@ -275,7 +275,10 @@ export default function Clients({ setNotification }) {
       target_countries: JSON.stringify(selectedCountries),
       resume_text: resumeText,
       email_template: JSON.stringify({ subject: emailTemplateSubject, body: emailTemplateBody }),
-      status
+      status,
+      resume_analysis: resumeAnalysis,
+      target_job_roles: targetJobRoles,
+      cover_letter_text: coverLetterText
     };
 
     try {
@@ -286,7 +289,7 @@ export default function Clients({ setNotification }) {
       });
       if (data.success) {
         setNotification({
-          message: editingClient ? 'Candidate details updated successfully!' : 'Candidate added successfully!',
+          message: editingClient ? 'Candidate details & template updated successfully!' : 'Candidate & outreach template added successfully!',
           type: 'success'
         });
         setIsOpen(false);
@@ -353,9 +356,12 @@ export default function Clients({ setNotification }) {
         body: JSON.stringify({ name, resume_text: textToUse })
       });
       if (data.success && data.template) {
-        setEmailTemplateSubject(data.template.subject || '');
-        setEmailTemplateBody(data.template.body || '');
-        setNotification({ message: 'Outreach email template generated successfully!', type: 'success' });
+        if (data.template.subject) setEmailTemplateSubject(data.template.subject);
+        if (data.template.body) setEmailTemplateBody(data.template.body);
+        if (data.template.resume_analysis) setResumeAnalysis(data.template.resume_analysis);
+        if (data.template.target_job_roles) setTargetJobRoles(data.template.target_job_roles);
+        if (data.template.cover_letter) setCoverLetterText(data.template.cover_letter);
+        setNotification({ message: 'Professional outreach template & resume analysis generated successfully!', type: 'success' });
       }
     } catch (err) {
       setNotification({ message: err.message, type: 'error' });
