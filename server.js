@@ -232,11 +232,12 @@ app.post('/api/contacts/bulk-paste', async (req, res) => {
     for (const c of contacts) {
       try {
         await dbRun(
-          'INSERT INTO contacts (name, email, company, role, industry, country) VALUES (?, ?, ?, ?, ?, ?)',
+          'INSERT OR REPLACE INTO contacts (name, email, company, role, industry, country) VALUES (?, ?, ?, ?, ?, ?)',
           [c.name, c.email, c.company, c.role, c.industry, c.country]
         );
         imported++;
       } catch (err) {
+        console.error('Failed to import contact:', err);
         failed++;
       }
     }
@@ -247,14 +248,22 @@ app.post('/api/contacts/bulk-paste', async (req, res) => {
 });
 
 function parseCSV(text) {
+  if (!text || typeof text !== 'string') return [];
+
+  // Clean UTF-8 BOM or other zero-width characters at the start of text
+  text = text.replace(/^[\uFEFF\uFFFE\u200B\u200D]/g, '').trim();
   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(line => line.length > 0);
   if (lines.length === 0) return [];
   
-  // Detect separator: count commas vs semicolons in the first line
+  // Detect separator: count commas vs semicolons vs tabs in the first line
   const firstLine = lines[0];
   const commaCount = (firstLine.match(/,/g) || []).length;
   const semicolonCount = (firstLine.match(/;/g) || []).length;
-  const sep = semicolonCount > commaCount ? ';' : ',';
+  const tabCount = (firstLine.match(/\t/g) || []).length;
+
+  let sep = ',';
+  if (semicolonCount > commaCount && semicolonCount > tabCount) sep = ';';
+  else if (tabCount > commaCount && tabCount > semicolonCount) sep = '\t';
 
   // Helper to parse a single CSV line respecting quotes and keeping empty fields
   const parseLine = (line, separator) => {
@@ -266,41 +275,65 @@ function parseCSV(text) {
       if (char === '"' || char === "'") {
         inQuotes = !inQuotes;
       } else if (char === separator && !inQuotes) {
-        result.push(current.trim().replace(/^["']|["']$/g, ''));
+        result.push(current.trim().replace(/^["']|["']$/g, '').trim());
         current = '';
       } else {
         current += char;
       }
     }
-    result.push(current.trim().replace(/^["']|["']$/g, ''));
+    result.push(current.trim().replace(/^["']|["']$/g, '').trim());
     return result;
   };
 
-  const headers = parseLine(lines[0], sep).map(h => h.toLowerCase());
+  const firstLineValues = parseLine(lines[0], sep);
+  // If first line contains an '@' symbol, it's a data row (no header row present)
+  const hasHeader = !firstLineValues.some(v => v.includes('@'));
+
+  let nameIndex = -1;
+  let emailIndex = -1;
+  let companyIndex = -1;
+  let roleIndex = -1;
+  let industryIndex = -1;
+  let countryIndex = -1;
+
+  if (hasHeader) {
+    const headers = firstLineValues.map(h => h.toLowerCase().replace(/[^a-z0-9]/g, ''));
+    nameIndex = headers.findIndex(h => h === 'name' || h.includes('name') || h === 'contact' || h.includes('person') || h.includes('hr'));
+    emailIndex = headers.findIndex(h => h === 'email' || h.includes('email') || h.includes('mail'));
+    companyIndex = headers.findIndex(h => h === 'company' || h.includes('company') || h === 'firm' || h === 'organization' || h === 'employer' || h.includes('corp'));
+    roleIndex = headers.findIndex(h => h === 'role' || h.includes('role') || h === 'title' || h.includes('title') || h === 'designation' || h === 'job' || h.includes('position'));
+    industryIndex = headers.findIndex(h => h === 'industry' || h.includes('industry') || h === 'sector' || h.includes('domain'));
+    countryIndex = headers.findIndex(h => h === 'country' || h.includes('country') || h === 'location' || h === 'nation' || h.includes('state'));
+  }
+
   const contacts = [];
+  const startIndex = hasHeader ? 1 : 0;
 
-  const nameIndex = headers.indexOf('name');
-  const emailIndex = headers.indexOf('email');
-  const companyIndex = headers.indexOf('company');
-  const roleIndex = headers.indexOf('role');
-  const titleIndex = headers.indexOf('title');
-  const industryIndex = headers.indexOf('industry');
-  const countryIndex = headers.indexOf('country');
-
-  for (let i = 1; i < lines.length; i++) {
+  for (let i = startIndex; i < lines.length; i++) {
     const values = parseLine(lines[i], sep);
     
-    // Extract by index if found, else default to fallback index
-    const name = values[nameIndex !== -1 ? nameIndex : 0] || '';
-    const email = values[emailIndex !== -1 ? emailIndex : 1] || '';
+    // Extract by header index if matched, else fallback to column position
+    let name = (nameIndex !== -1 && values[nameIndex] !== undefined) ? values[nameIndex] : (values[0] || '');
+    let email = (emailIndex !== -1 && values[emailIndex] !== undefined) ? values[emailIndex] : (values[1] || '');
     const company = (companyIndex !== -1 && values[companyIndex] !== undefined) ? values[companyIndex] : (values[2] || '');
-    const role = (roleIndex !== -1 && values[roleIndex] !== undefined) ? values[roleIndex] : 
-                 ((titleIndex !== -1 && values[titleIndex] !== undefined) ? values[titleIndex] : (values[3] || ''));
+    const role = (roleIndex !== -1 && values[roleIndex] !== undefined) ? values[roleIndex] : (values[3] || '');
     const industry = (industryIndex !== -1 && values[industryIndex] !== undefined) ? values[industryIndex] : (values[4] || '');
     const country = (countryIndex !== -1 && values[countryIndex] !== undefined) ? values[countryIndex] : (values[5] || '');
 
-    if (name && email && email.includes('@')) {
-      contacts.push({ name, email, company, role, industry, country });
+    // Fallback: if email wasn't found by index, find any value that contains '@'
+    if (!email || !email.includes('@')) {
+      const emailVal = values.find(v => v.includes('@'));
+      if (emailVal) email = emailVal;
+    }
+
+    // Fallback: if name is empty, extract from email prefix
+    if (!name && email && email.includes('@')) {
+      const prefix = email.split('@')[0].replace(/[._-]/g, ' ');
+      name = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+    }
+
+    if (email && email.includes('@')) {
+      contacts.push({ name: name || 'HR Contact', email, company, role, industry, country });
     }
   }
   return contacts;

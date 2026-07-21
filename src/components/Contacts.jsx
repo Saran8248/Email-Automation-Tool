@@ -404,6 +404,7 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
                   id="csvFileInput" 
                   accept=".csv" 
                   style={{ display: 'none' }} 
+                  onClick={e => { e.stopPropagation(); e.target.value = null; }}
                   onChange={e => {
                     if (e.target.files && e.target.files[0]) {
                       handleFileSelect(e.target.files[0]);
