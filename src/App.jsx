@@ -5,6 +5,25 @@ import Clients from './components/Clients.jsx';
 import Settings from './components/Settings.jsx';
 import Logs from './components/Logs.jsx';
 
+async function safeFetchJson(url, options = {}) {
+  const res = await fetch(url, options);
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || data.reason || data.message || `Server error (${res.status})`);
+    }
+    return data;
+  } else {
+    const text = await res.text();
+    const cleanText = text.replace(/<[^>]*>?/gm, '').trim().substring(0, 150);
+    if (!res.ok) {
+      throw new Error(cleanText || `Server error (${res.status})`);
+    }
+    try { return JSON.parse(text); } catch { return { success: true, text }; }
+  }
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [contacts, setContacts] = useState([]);
@@ -30,8 +49,7 @@ export default function App() {
 
   const fetchContacts = async () => {
     try {
-      const res = await fetch('/api/contacts');
-      const data = await res.json();
+      const data = await safeFetchJson('/api/contacts');
       if (Array.isArray(data)) {
         setContacts(data);
       }
@@ -42,8 +60,7 @@ export default function App() {
 
   const fetchClients = async () => {
     try {
-      const res = await fetch('/api/clients');
-      const data = await res.json();
+      const data = await safeFetchJson('/api/clients');
       if (Array.isArray(data)) {
         setClients(data);
       }
@@ -54,8 +71,7 @@ export default function App() {
 
   const fetchLogs = async () => {
     try {
-      const res = await fetch('/api/logs');
-      const data = await res.json();
+      const data = await safeFetchJson('/api/logs');
       if (Array.isArray(data)) {
         setLogs(data);
       }
@@ -68,8 +84,7 @@ export default function App() {
     setTriggerInProgress(true);
     setNotification({ message: 'Starting email outreach campaign for all active candidates...', type: 'success' });
     try {
-      const res = await fetch('/api/campaign/trigger', { method: 'POST' });
-      const data = await res.json();
+      const data = await safeFetchJson('/api/campaign/trigger', { method: 'POST' });
       if (data.success) {
         setNotification({
           message: `Campaign complete! Sent: ${data.sent || 0}, Failed: ${data.failed || 0}`,
@@ -79,7 +94,7 @@ export default function App() {
         fetchContacts();
         fetchClients();
       } else {
-        setNotification({ message: data.reason || 'Campaign run incomplete. Check config.', type: 'error' });
+        setNotification({ message: data.reason || data.error || 'Campaign run incomplete. Check config.', type: 'error' });
       }
     } catch (err) {
       setNotification({ message: err.message, type: 'error' });

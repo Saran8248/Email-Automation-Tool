@@ -14,6 +14,32 @@ const INDUSTRIES_LIST = [
 
 const COUNTRIES_LIST = ['Germany', 'UAE', 'Netherlands', 'Australia'];
 
+async function safeFetchJson(url, options = {}) {
+  try {
+    const res = await fetch(url, options);
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || data.reason || data.message || `Server error (${res.status})`);
+      }
+      return data;
+    } else {
+      const text = await res.text();
+      const cleanText = text.replace(/<[^>]*>?/gm, '').trim().substring(0, 150);
+      if (!res.ok) {
+        throw new Error(cleanText || `Server error (${res.status})`);
+      }
+      try { return JSON.parse(text); } catch { return { success: true, text }; }
+    }
+  } catch (err) {
+    if (err.message === 'Failed to fetch' || err.name === 'TypeError') {
+      throw new Error('Backend server is offline or disconnected. Please ensure "node server.js" is running.');
+    }
+    throw err;
+  }
+}
+
 export default function Contacts({ contacts, fetchContacts, setNotification, clients = [] }) {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isBulkOpen, setIsBulkOpen] = useState(false);
@@ -29,19 +55,25 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
   const [country, setCountry] = useState('');
   const [status, setStatus] = useState('Active');
   
-  // CSV Import State
+  // CSV / File Import State
   const [csvText, setCsvText] = useState('');
+  const [selectedFile, setSelectedFile] = useState(null);
   const [filename, setFilename] = useState('');
   const [importing, setImporting] = useState(false);
 
   const handleFileSelect = (file) => {
     if (!file) return;
     setFilename(file.name);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setCsvText(e.target.result);
-    };
-    reader.readAsText(file);
+    setSelectedFile(file);
+    if (file.name.toLowerCase().endsWith('.csv') || file.name.toLowerCase().endsWith('.txt')) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setCsvText(e.target.result);
+      };
+      reader.readAsText(file);
+    } else {
+      setCsvText(`Binary file loaded (${file.name})`);
+    }
   };
 
   // Preview / Send states
@@ -67,12 +99,11 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
     const method = editingContact ? 'PUT' : 'POST';
 
     try {
-      const res = await fetch(url, {
+      const data = await safeFetchJson(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, company, role, industry, country, status })
       });
-      const data = await res.json();
       if (data.success) {
         setNotification({
           message: editingContact ? 'Contact updated successfully' : 'Contact added successfully',
@@ -104,8 +135,7 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
   const handleDelete = async (id) => {
     if (!confirm('Are you sure you want to delete this contact?')) return;
     try {
-      const res = await fetch(`/api/contacts/${id}`, { method: 'DELETE' });
-      const data = await res.json();
+      const data = await safeFetchJson(`/api/contacts/${id}`, { method: 'DELETE' });
       if (data.success) {
         setNotification({ message: 'Contact deleted successfully', type: 'success' });
         fetchContacts();
@@ -119,14 +149,25 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
 
   const handleBulkPaste = async (e) => {
     e.preventDefault();
+    if (!selectedFile && !csvText) return;
     setImporting(true);
     try {
-      const res = await fetch('/api/contacts/bulk-paste', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ csvText })
-      });
-      const data = await res.json();
+      let data;
+      if (selectedFile) {
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        data = await safeFetchJson('/api/contacts/bulk-file', {
+          method: 'POST',
+          body: formData
+        });
+      } else {
+        data = await safeFetchJson('/api/contacts/bulk-paste', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ csvText })
+        });
+      }
+      
       if (data.success) {
         setNotification({
           message: `Imported ${data.imported} contacts successfully. Failed: ${data.failed}`,
@@ -134,6 +175,8 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
         });
         setIsBulkOpen(false);
         setCsvText('');
+        setSelectedFile(null);
+        setFilename('');
         fetchContacts();
       } else {
         setNotification({ message: data.error || 'Failed to import contacts', type: 'error' });
@@ -166,18 +209,12 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
     setPreviewData({ subject: '', body: '' });
 
     try {
-      const res = await fetch('/api/generate-preview', {
+      const data = await safeFetchJson('/api/generate-preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clientId: activeClientId, contactId: contact.id })
       });
-      const data = await res.json();
-      if (res.ok) {
-        setPreviewData({ subject: data.subject || '', body: data.body || '' });
-      } else {
-        setNotification({ message: data.error || 'Failed to generate preview', type: 'error' });
-        setIsPreviewOpen(false);
-      }
+      setPreviewData({ subject: data.subject || '', body: data.body || '' });
     } catch (err) {
       setNotification({ message: err.message, type: 'error' });
       setIsPreviewOpen(false);
@@ -191,7 +228,7 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
     setSendingEmail(true);
 
     try {
-      const res = await fetch('/api/send-email', {
+      const data = await safeFetchJson('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -201,7 +238,6 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
           customBody: previewData.body
         })
       });
-      const data = await res.json();
       if (data.success) {
         setNotification({ message: 'Email sent successfully!', type: 'success' });
         setIsPreviewOpen(false);
@@ -363,18 +399,18 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: '650px' }}>
             <div className="modal-header" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
-              <h4 className="modal-title" style={{ fontSize: '1.5rem', fontWeight: '700' }}>Upload HR contact list</h4>
+              <h4 className="modal-title" style={{ fontSize: '1.5rem', fontWeight: '700' }}>Upload HR CSV File</h4>
               <button className="icon-btn" onClick={() => setIsBulkOpen(false)}>&times;</button>
             </div>
             
             <div style={{ marginTop: '1.5rem' }}>
               <p className="page-subtitle" style={{ fontSize: '1rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
-                Upload a <strong>CSV</strong> file. OutreachSphere auto-detects columns. Recognised headers:
+                Select or drop your <strong>.csv</strong> file below. Auto-detected headers:
               </p>
               
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
                 {['name', 'email', 'company', 'title', 'industry', 'country'].map(h => (
-                  <span key={h} className="badge" style={{ backgroundColor: '#1e1b4b', color: '#a78bfa', padding: '0.4rem 0.8rem', fontSize: '0.85rem', textTransform: 'none' }}>
+                  <span key={h} className="badge" style={{ backgroundColor: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', padding: '0.4rem 0.8rem', fontSize: '0.85rem', textTransform: 'none', border: '1px solid rgba(56, 189, 248, 0.3)' }}>
                     {h}
                   </span>
                 ))}
@@ -382,13 +418,14 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
 
               <div 
                 style={{
-                  border: '2px dashed var(--border-color)',
+                  border: '2px dashed #38bdf8',
                   borderRadius: '12px',
-                  padding: '3rem 2rem',
+                  padding: '2.5rem 1.5rem',
                   textAlign: 'center',
                   cursor: 'pointer',
-                  backgroundColor: 'rgba(21, 23, 31, 0.5)',
+                  backgroundColor: 'rgba(15, 23, 42, 0.7)',
                   transition: 'border-color 0.2s',
+                  marginBottom: '1rem'
                 }}
                 onClick={() => document.getElementById('csvFileInput').click()}
                 onDragOver={e => e.preventDefault()}
@@ -402,7 +439,7 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
                 <input 
                   type="file" 
                   id="csvFileInput" 
-                  accept=".csv" 
+                  accept=".csv,.txt" 
                   style={{ display: 'none' }} 
                   onClick={e => { e.stopPropagation(); e.target.value = null; }}
                   onChange={e => {
@@ -411,15 +448,30 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
                     }
                   }}
                 />
-                <span style={{ fontSize: '2rem', display: 'block', marginBottom: '0.5rem' }}>📁</span>
-                <span style={{ color: 'var(--text-secondary)', fontSize: '1rem' }}>
-                  {csvText ? `Selected file: ${filename || 'contacts.csv'}` : 'Click to choose a CSV file (or drag & drop here)'}
+                <span style={{ fontSize: '2.5rem', display: 'block', marginBottom: '0.5rem' }}>📊</span>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '1rem', fontWeight: '500' }}>
+                  {filename ? `Selected CSV File: ${filename}` : 'Click to select a .csv file (or drag & drop here)'}
                 </span>
-                {csvText && (
-                  <span style={{ display: 'block', fontSize: '0.8rem', color: 'var(--success)', marginTop: '0.5rem' }}>
-                    File loaded successfully &bull; Ready to import
+                {csvText && !csvText.startsWith('Binary file') && (
+                  <span style={{ display: 'block', fontSize: '0.85rem', color: 'var(--success)', marginTop: '0.5rem', fontWeight: '600' }}>
+                    CSV file loaded successfully ({csvText.split('\n').length} lines) &bull; Ready to import
                   </span>
                 )}
+              </div>
+
+              <div className="form-group">
+                <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>OR PASTE CSV CONTENT DIRECTLY:</label>
+                <textarea 
+                  className="form-textarea"
+                  value={csvText.startsWith('Binary file') ? '' : csvText}
+                  onChange={e => {
+                    setCsvText(e.target.value);
+                    setSelectedFile(null);
+                    setFilename('Pasted CSV text');
+                  }}
+                  placeholder="Name,Email,Company,Role,Industry,Country&#10;Sarah,sarah@corp.com,TechCorp,Recruiter,Technology,Germany"
+                  style={{ minHeight: '100px', fontSize: '0.85rem', fontFamily: 'monospace' }}
+                />
               </div>
             </div>
 

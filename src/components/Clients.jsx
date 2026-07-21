@@ -14,6 +14,25 @@ const INDUSTRIES_LIST = [
 
 const COUNTRIES_LIST = ['Germany', 'UAE', 'Netherlands', 'Australia'];
 
+async function safeFetchJson(url, options = {}) {
+  const res = await fetch(url, options);
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || data.reason || data.message || `Server error (${res.status})`);
+    }
+    return data;
+  } else {
+    const text = await res.text();
+    const cleanText = text.replace(/<[^>]*>?/gm, '').trim().substring(0, 150);
+    if (!res.ok) {
+      throw new Error(cleanText || `Server error (${res.status})`);
+    }
+    try { return JSON.parse(text); } catch { return { success: true, text }; }
+  }
+}
+
 export default function Clients({ setNotification }) {
   const [clients, setClients] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
@@ -40,8 +59,7 @@ export default function Clients({ setNotification }) {
 
   const fetchClients = async () => {
     try {
-      const res = await fetch('/api/clients');
-      const data = await res.json();
+      const data = await safeFetchJson('/api/clients');
       if (Array.isArray(data)) {
         setClients(data);
       }
@@ -103,8 +121,7 @@ export default function Clients({ setNotification }) {
   const handleDelete = async (id) => {
     if (!confirm('Are you sure you want to delete this candidate?')) return;
     try {
-      const res = await fetch(`/api/clients/${id}`, { method: 'DELETE' });
-      const data = await res.json();
+      const data = await safeFetchJson(`/api/clients/${id}`, { method: 'DELETE' });
       if (data.success) {
         setNotification({ message: 'Candidate deleted successfully', type: 'success' });
         fetchClients();
@@ -133,12 +150,11 @@ export default function Clients({ setNotification }) {
     };
 
     try {
-      const res = await fetch(url, {
+      const data = await safeFetchJson(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      const data = await res.json();
       if (data.success) {
         setNotification({
           message: editingClient ? 'Candidate details updated successfully!' : 'Candidate added successfully!',
@@ -177,16 +193,15 @@ export default function Clients({ setNotification }) {
     }
     setTestingSmtp(true);
     try {
-      const res = await fetch('/api/clients/test-smtp', {
+      const data = await safeFetchJson('/api/clients/test-smtp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, app_password: appPassword })
       });
-      const data = await res.json();
       if (data.success) {
-        setNotification({ message: data.message || 'SMTP Connection succeeded!', type: 'success' });
+        setNotification({ message: data.message || 'SMTP Test succeeded!', type: 'success' });
       } else {
-        setNotification({ message: data.error || 'SMTP Connection failed', type: 'error' });
+        setNotification({ message: data.error || 'SMTP Test failed', type: 'error' });
       }
     } catch (err) {
       setNotification({ message: err.message, type: 'error' });
@@ -195,26 +210,23 @@ export default function Clients({ setNotification }) {
     }
   };
 
-  const handleGenerateTemplate = async (customResumeText = null) => {
-    const textToUse = customResumeText !== null ? customResumeText : resumeText;
+  const handleGenerateTemplate = async (overrideResumeText = null) => {
+    const textToUse = overrideResumeText !== null ? overrideResumeText : resumeText;
     if (!textToUse) {
-      setNotification({ message: 'Please enter or upload resume details first.', type: 'error' });
+      setNotification({ message: 'Please paste or upload candidate resume details first.', type: 'error' });
       return;
     }
     setGeneratingTemplate(true);
     try {
-      const res = await fetch('/api/generate-template', {
+      const data = await safeFetchJson('/api/generate-template', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, resume_text: textToUse })
       });
-      const data = await res.json();
       if (data.success && data.template) {
         setEmailTemplateSubject(data.template.subject || '');
         setEmailTemplateBody(data.template.body || '');
-        setNotification({ message: 'AI email template generated successfully!', type: 'success' });
-      } else {
-        setNotification({ message: data.error || 'Failed to generate template', type: 'error' });
+        setNotification({ message: 'Outreach email template generated successfully!', type: 'success' });
       }
     } catch (err) {
       setNotification({ message: err.message, type: 'error' });
@@ -223,35 +235,30 @@ export default function Clients({ setNotification }) {
     }
   };
 
-  const handleUploadResumeTextFile = async (file) => {
+  const handleResumeFileUpload = async (file) => {
     if (!file) return;
-    if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
-      setNotification({ message: 'Parsing PDF file... Please wait.', type: 'success' });
+    if (file.name.toLowerCase().endsWith('.pdf')) {
       const formData = new FormData();
       formData.append('file', file);
       try {
-        const res = await fetch('/api/parse-pdf', {
+        const data = await safeFetchJson('/api/parse-pdf', {
           method: 'POST',
           body: formData
         });
-        const data = await res.json();
-        if (data.success) {
+        if (data.text) {
           setResumeText(data.text);
-          setNotification({ message: 'Resume text loaded. Generating AI email template...', type: 'success' });
-          await handleGenerateTemplate(data.text);
-        } else {
-          setNotification({ message: data.error || 'Failed to parse PDF resume', type: 'error' });
+          setNotification({ message: 'Parsed PDF resume successfully!', type: 'success' });
+          handleGenerateTemplate(data.text);
         }
       } catch (err) {
-        setNotification({ message: err.message, type: 'error' });
+        setNotification({ message: 'Failed to parse PDF resume: ' + err.message, type: 'error' });
       }
     } else {
       const reader = new FileReader();
-      reader.onload = async (e) => {
-        const content = e.target.result;
-        setResumeText(content);
-        setNotification({ message: 'Resume text loaded. Generating AI email template...', type: 'success' });
-        await handleGenerateTemplate(content);
+      reader.onload = (e) => {
+        const text = e.target.result;
+        setResumeText(text);
+        handleGenerateTemplate(text);
       };
       reader.readAsText(file);
     }

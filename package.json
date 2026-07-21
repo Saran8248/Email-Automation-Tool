@@ -21,7 +21,8 @@
     "node-cron": "^3.0.3",
     "nodemailer": "^6.9.13",
     "pdf-parse": "^2.4.5",
-    "sqlite3": "^5.1.7"
+    "sqlite3": "^5.1.7",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/react": "^18.3.3",

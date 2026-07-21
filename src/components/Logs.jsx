@@ -1,13 +1,31 @@
 import React, { useState } from 'react';
 
+async function safeFetchJson(url, options = {}) {
+  const res = await fetch(url, options);
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || data.reason || data.message || `Server error (${res.status})`);
+    }
+    return data;
+  } else {
+    const text = await res.text();
+    const cleanText = text.replace(/<[^>]*>?/gm, '').trim().substring(0, 150);
+    if (!res.ok) {
+      throw new Error(cleanText || `Server error (${res.status})`);
+    }
+    try { return JSON.parse(text); } catch { return { success: true, text }; }
+  }
+}
+
 export default function Logs({ logs, fetchLogs, setNotification }) {
   const [selectedLog, setSelectedLog] = useState(null);
 
   const handleClearLogs = async () => {
     if (!confirm('Are you sure you want to clear all outreach logs? This cannot be undone.')) return;
     try {
-      const res = await fetch('/api/logs/clear', { method: 'POST' });
-      const data = await res.json();
+      const data = await safeFetchJson('/api/logs/clear', { method: 'POST' });
       if (data.success) {
         setNotification({ message: 'Outreach history cleared successfully!', type: 'success' });
         fetchLogs();

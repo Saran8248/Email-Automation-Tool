@@ -1,4 +1,21 @@
-import React, { useState, useEffect } from 'react';
+async function safeFetchJson(url, options = {}) {
+  const res = await fetch(url, options);
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || data.reason || data.message || `Server error (${res.status})`);
+    }
+    return data;
+  } else {
+    const text = await res.text();
+    const cleanText = text.replace(/<[^>]*>?/gm, '').trim().substring(0, 150);
+    if (!res.ok) {
+      throw new Error(cleanText || `Server error (${res.status})`);
+    }
+    try { return JSON.parse(text); } catch { return { success: true, text }; }
+  }
+}
 
 export default function Settings({ setNotification }) {
   const [settings, setSettings] = useState({
@@ -23,8 +40,7 @@ export default function Settings({ setNotification }) {
 
   const fetchSettings = async () => {
     try {
-      const res = await fetch('/api/settings');
-      const data = await res.json();
+      const data = await safeFetchJson('/api/settings');
       if (data) {
         setSettings(data);
       }
@@ -37,12 +53,11 @@ export default function Settings({ setNotification }) {
     if (e) e.preventDefault();
     setSaving(true);
     try {
-      const res = await fetch('/api/settings', {
+      const data = await safeFetchJson('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings)
       });
-      const data = await res.json();
       if (data.success) {
         setNotification({ message: 'Settings saved successfully!', type: 'success' });
       } else {
@@ -55,19 +70,18 @@ export default function Settings({ setNotification }) {
     }
   };
 
-  const testSmtpConnection = async () => {
+  const handleTestSMTP = async () => {
     if (!settings.smtp_user || !settings.smtp_pass) {
       setNotification({ message: 'Please provide SMTP email address and password first', type: 'error' });
       return;
     }
     setTestingSmtp(true);
     try {
-      const res = await fetch('/api/settings/test-smtp', {
+      const data = await safeFetchJson('/api/settings/test-smtp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings)
       });
-      const data = await res.json();
       if (data.success) {
         setNotification({ message: data.message || 'SMTP Connection Test succeeded!', type: 'success' });
       } else {

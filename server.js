@@ -9,6 +9,7 @@ import fs from 'fs';
 import { initDb, dbRun, dbGet, dbAll } from './db.js';
 import multer from 'multer';
 import { PDFParse } from 'pdf-parse';
+import * as XLSX from 'xlsx';
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -20,7 +21,8 @@ const app = express();
 const port = process.env.PORT || 5000;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Initialize Database
 initDb().then(() => {
@@ -130,8 +132,12 @@ app.post('/api/generate-template', async (req, res) => {
     const { name, resume_text } = req.body;
     const settings = await getSettingsMap();
     if (!settings.gemini_api_key) {
-      return res.status(400).json({ error: 'Gemini API key is not configured in Settings.' });
-    }
+    const fallbackTemplate = {
+      subject: `Application for {role} role at {company_name} - {candidate_name}`,
+      body: `Hi {contact_name},\n\nI hope this email finds you well. I am reaching out to express my strong interest in potential {role} opportunities at {company_name}.\n\nGiven my background in the {industry} sector and extensive technical experience, I believe I can add immediate value to your team. I have attached my resume details for your review.\n\nI would welcome the opportunity for a brief conversation to discuss how my skills align with your upcoming goals.\n\nBest regards,\n{candidate_name}\n{candidate_email}`
+    };
+    return res.json({ success: true, template: fallbackTemplate, isFallback: true });
+  }
     
     const genAI = new GoogleGenerativeAI(settings.gemini_api_key);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
@@ -216,6 +222,53 @@ app.delete('/api/contacts/:id', async (req, res) => {
   try {
     await dbRun('DELETE FROM contacts WHERE id = ?', [req.params.id]);
     res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Bulk Upload HR File (.csv, .xlsx, .xls, .pdf)
+app.post('/api/contacts/bulk-file', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    let csvText = '';
+    const filename = (req.file.originalname || '').toLowerCase();
+
+    if (filename.endsWith('.xlsx') || filename.endsWith('.xls')) {
+      const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+      const firstSheetName = workbook.SheetNames[0];
+      if (firstSheetName) {
+        const worksheet = workbook.Sheets[firstSheetName];
+        csvText = XLSX.utils.sheet_to_csv(worksheet);
+      }
+    } else if (filename.endsWith('.pdf')) {
+      const parser = new PDFParse({ data: req.file.buffer });
+      const result = await parser.getText();
+      csvText = result.text;
+    } else {
+      csvText = req.file.buffer.toString('utf-8');
+    }
+
+    const contacts = parseCSV(csvText);
+    let imported = 0;
+    let failed = 0;
+
+    for (const c of contacts) {
+      try {
+        await dbRun(
+          'INSERT OR REPLACE INTO contacts (name, email, company, role, industry, country) VALUES (?, ?, ?, ?, ?, ?)',
+          [c.name, c.email, c.company, c.role, c.industry, c.country]
+        );
+        imported++;
+      } catch (err) {
+        console.error('Failed to import contact from file:', err);
+        failed++;
+      }
+    }
+    res.json({ success: true, imported, failed });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -336,6 +389,56 @@ function parseCSV(text) {
       contacts.push({ name: name || 'HR Contact', email, company, role, industry, country });
     }
   }
+
+  // Fallback scanner for PDF / Unstructured / Key-Value text if no structured CSV rows were matched
+  if (contacts.length === 0) {
+    const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/gi;
+    const seenEmails = new Set();
+    const allMatches = [...text.matchAll(emailRegex)];
+
+    for (const match of allMatches) {
+      const email = match[1].toLowerCase();
+      if (seenEmails.has(email)) continue;
+      seenEmails.add(email);
+
+      const matchIndex = match.index || 0;
+      const snippetStart = Math.max(0, matchIndex - 200);
+      const snippetEnd = Math.min(text.length, matchIndex + 200);
+      const snippet = text.substring(snippetStart, snippetEnd);
+
+      let name = '';
+      let company = '';
+      let role = '';
+      let country = '';
+
+      const nameM = snippet.match(/(?:Name|Contact|HR|Person|Candidate):\s*([A-Za-z\s.'-]+)/i);
+      if (nameM) name = nameM[1].trim();
+
+      const compM = snippet.match(/(?:Company|Firm|Organization|Employer):\s*([A-Za-z0-9\s.'-]+)/i);
+      if (compM) company = compM[1].trim();
+
+      const roleM = snippet.match(/(?:Role|Title|Position|Job):\s*([A-Za-z0-9\s.'-]+)/i);
+      if (roleM) role = roleM[1].trim();
+
+      const countryM = snippet.match(/(?:Country|Location):\s*([A-Za-z\s.'-]+)/i);
+      if (countryM) country = countryM[1].trim();
+
+      if (!name) {
+        const prefix = email.split('@')[0].replace(/[._-]/g, ' ');
+        name = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+      }
+
+      contacts.push({
+        name: name || 'HR Contact',
+        email,
+        company: company || '',
+        role: role || '',
+        industry: '',
+        country: country || ''
+      });
+    }
+  }
+
   return contacts;
 }
 
@@ -481,7 +584,10 @@ async function generateEmailContent(client, contact, settings) {
   }
 
   if (!settings.gemini_api_key) {
-    throw new Error('Gemini API key is not configured in Settings.');
+    return {
+      subject: `Application for ${contact.role || 'Opportunity'} at ${contact.company || 'your team'} - ${client.name}`,
+      body: `Hi ${contact.name || 'Hiring Manager'},\n\nI hope you are having a great week. I am reaching out to express my strong interest in ${contact.role || 'relevant opportunities'} at ${contact.company || 'your company'}.\n\nWith my background and expertise in ${contact.industry || 'the industry'}, I am confident in my ability to contribute effectively to your team. Please find my resume details below:\n\n${client.resume_text || ''}\n\nI would love the opportunity to connect for a quick 10-minute call to introduce myself.\n\nBest regards,\n${client.name}\n${client.email}`
+    };
   }
 
   const genAI = new GoogleGenerativeAI(settings.gemini_api_key);
@@ -575,22 +681,26 @@ async function runDailyCampaign() {
   console.log("Running scheduled multi-candidate email campaign...");
   const settings = await getSettingsMap();
   const limitPerCandidate = parseInt(settings.daily_limit) || 10;
-  
-  if (!settings.gemini_api_key) {
-    console.log("Campaign aborted: Gemini API key is missing.");
-    return { success: false, reason: "Gemini API key missing" };
-  }
 
   // Get active candidates
   const activeClients = await dbAll("SELECT * FROM clients WHERE status = 'Active'");
   if (activeClients.length === 0) {
-    return { success: true, sent: 0, message: "No active candidates found." };
+    return { success: false, reason: "No active candidate profiles found. Please add a candidate in the Clients tab first." };
+  }
+
+  // Check if candidates have app password configured
+  const clientsWithPass = activeClients.filter(c => c.app_password && c.app_password.trim().length > 0);
+  if (clientsWithPass.length === 0) {
+    return { 
+      success: false, 
+      reason: "No active candidates have a Gmail App Password configured. Please edit the candidate in Clients tab and enter their Gmail App Password." 
+    };
   }
 
   // Get all active HR contacts
   const allContacts = await dbAll("SELECT * FROM contacts WHERE status = 'Active'");
   if (allContacts.length === 0) {
-    return { success: true, sent: 0, message: "No active HR contacts found." };
+    return { success: false, reason: "No active HR contacts found. Please upload or add contacts in HR Contacts Manager." };
   }
 
   let totalSent = 0;
@@ -699,6 +809,9 @@ const distPath = path.join(__dirname, 'dist');
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
   app.get('*', (req, res) => {
+    if (req.path.startsWith('/api')) {
+      return res.status(404).json({ error: `API route ${req.path} not found` });
+    }
     res.sendFile(path.join(distPath, 'index.html'));
   });
 } else {
@@ -706,6 +819,12 @@ if (fs.existsSync(distPath)) {
     res.send('API Server is running.');
   });
 }
+
+// Global JSON Error Handler
+app.use((err, req, res, next) => {
+  console.error("Express API Error:", err);
+  res.status(err.status || 500).json({ error: err.message || "An unexpected server error occurred." });
+});
 
 app.listen(port, () => {
   console.log(`Email Automation Server is listening at http://localhost:${port}`);
