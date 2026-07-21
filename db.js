@@ -101,6 +101,11 @@ export async function initDb() {
     )
   `);
 
+  // Add missing columns to logs table if database was created previously
+  try { await dbRun(`ALTER TABLE logs ADD COLUMN client_id INTEGER`); } catch (err) {}
+  try { await dbRun(`ALTER TABLE logs ADD COLUMN client_name TEXT`); } catch (err) {}
+  try { await dbRun(`ALTER TABLE logs ADD COLUMN client_email TEXT`); } catch (err) {}
+
   // Insert default configurations
   const defaults = {
     'gemini_api_key': '',

@@ -379,14 +379,20 @@ function parseCSV(text) {
       if (emailVal) email = emailVal;
     }
 
-    // Fallback: if name is empty, extract from email prefix
-    if (!name && email && email.includes('@')) {
-      const prefix = email.split('@')[0].replace(/[._-]/g, ' ');
-      name = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+    // Fallback: if name is empty, set to Hiring Manager
+    if (!name) {
+      name = 'Hiring Manager';
     }
 
     if (email && email.includes('@')) {
-      contacts.push({ name: name || 'HR Contact', email, company, role, industry, country });
+      contacts.push({
+        name: name || 'Hiring Manager',
+        email,
+        company: company || '',
+        role: role || '',
+        industry: industry || '',
+        country: country || ''
+      });
     }
   }
 
@@ -423,13 +429,8 @@ function parseCSV(text) {
       const countryM = snippet.match(/(?:Country|Location):\s*([A-Za-z\s.'-]+)/i);
       if (countryM) country = countryM[1].trim();
 
-      if (!name) {
-        const prefix = email.split('@')[0].replace(/[._-]/g, ' ');
-        name = prefix.charAt(0).toUpperCase() + prefix.slice(1);
-      }
-
       contacts.push({
-        name: name || 'HR Contact',
+        name: name || 'Hiring Manager',
         email,
         company: company || '',
         role: role || '',
