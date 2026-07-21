@@ -10,6 +10,7 @@ import { initDb, dbRun, dbGet, dbAll } from './db.js';
 import multer from 'multer';
 import { PDFParse } from 'pdf-parse';
 import * as XLSX from 'xlsx';
+import PDFDocument from 'pdfkit';
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -696,6 +697,40 @@ Ensure output is valid JSON.
   }
 }
 
+async function generatePdfBuffer(candidateName, resumeText) {
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({ margin: 40 });
+      const buffers = [];
+      doc.on('data', buffers.push.bind(buffers));
+      doc.on('end', () => {
+        resolve(Buffer.concat(buffers));
+      });
+
+      // PDF Resume Formatting
+      doc.fontSize(20).fillColor('#0284c7').text(candidateName.toUpperCase(), { align: 'center' });
+      doc.moveDown(0.2);
+      doc.fontSize(10).fillColor('#64748b').text('CURRICULUM VITAE / PROFESSIONAL RESUME', { align: 'center' });
+      doc.moveDown(0.8);
+
+      // Line separator
+      doc.moveTo(40, doc.y).lineTo(570, doc.y).strokeColor('#0284c7').lineWidth(1.5).stroke();
+      doc.moveDown(1);
+
+      // Body text
+      const bodyText = resumeText || `Professional Resume details for ${candidateName}.`;
+      doc.fontSize(10).fillColor('#1e293b').text(bodyText, {
+        align: 'left',
+        lineGap: 4
+      });
+
+      doc.end();
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
 async function sendRawEmail(to, subject, body, client) {
   if (!client.email || !client.app_password) {
     throw new Error(`Email address or Gmail App Password is not configured for candidate ${client.name}.`);
@@ -716,7 +751,6 @@ async function sendRawEmail(to, subject, body, client) {
   });
 
   const htmlBody = body.replace(/\n/g, '<br>');
-  const resumeContent = client.resume_text ? client.resume_text.replace(/\n/g, '<br>') : 'Professional summary details attached.';
 
   // Build HTML email with clean resume appendix at the end
   const fullHtml = `
@@ -736,7 +770,15 @@ ${client.resume_text || 'Professional summary details provided upon request.'}
     </div>
   `;
 
-  const safeFilename = `${(client.name || 'Candidate').replace(/[^a-zA-Z0-9_-]/g, '_')}_Resume.txt`;
+  // Generate binary PDF buffer for attachment
+  const safeFilename = `${(client.name || 'Candidate').replace(/[^a-zA-Z0-9_-]/g, '_')}_Resume.pdf`;
+  let pdfAttachmentBuffer = null;
+  try {
+    pdfAttachmentBuffer = await generatePdfBuffer(client.name || 'Candidate', client.resume_text);
+  } catch (pdfErr) {
+    console.error("Failed to generate PDF buffer, falling back to text:", pdfErr);
+    pdfAttachmentBuffer = Buffer.from(client.resume_text || `Resume for ${client.name}`);
+  }
 
   const mailOptions = {
     from: `"${client.name}" <${client.email}>`,
@@ -746,8 +788,8 @@ ${client.resume_text || 'Professional summary details provided upon request.'}
     attachments: [
       {
         filename: safeFilename,
-        content: client.resume_text || `Resume and professional details for ${client.name}`,
-        contentType: 'text/plain'
+        content: pdfAttachmentBuffer,
+        contentType: 'application/pdf'
       }
     ]
   };
