@@ -716,12 +716,40 @@ async function sendRawEmail(to, subject, body, client) {
   });
 
   const htmlBody = body.replace(/\n/g, '<br>');
+  const resumeContent = client.resume_text ? client.resume_text.replace(/\n/g, '<br>') : 'Professional summary details attached.';
+
+  // Build HTML email with clean resume appendix at the end
+  const fullHtml = `
+    <div style="font-family: Arial, sans-serif; font-size: 14px; color: #333333; line-height: 1.6;">
+      ${htmlBody}
+      
+      <div style="margin-top: 35px; padding-top: 20px; border-top: 2px solid #e2e8f0;">
+        <div style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-left: 4px solid #0284c7; padding: 18px; border-radius: 8px; font-size: 13px; color: #334155;">
+          <div style="font-weight: bold; color: #0284c7; font-size: 14px; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+            📄 RESUME &amp; PROFESSIONAL SUMMARY &mdash; ${client.name}
+          </div>
+          <div style="font-family: 'Courier New', Courier, monospace; font-size: 12px; white-space: pre-wrap; color: #1e293b; background: #ffffff; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0; max-height: 400px; overflow-y: auto;">
+${client.resume_text || 'Professional summary details provided upon request.'}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const safeFilename = `${(client.name || 'Candidate').replace(/[^a-zA-Z0-9_-]/g, '_')}_Resume.txt`;
 
   const mailOptions = {
     from: `"${client.name}" <${client.email}>`,
     to,
     subject,
-    html: `<div style="font-family: Arial, sans-serif; font-size: 14px; color: #333; line-height: 1.6;">${htmlBody}</div>`,
+    html: fullHtml,
+    attachments: [
+      {
+        filename: safeFilename,
+        content: client.resume_text || `Resume and professional details for ${client.name}`,
+        contentType: 'text/plain'
+      }
+    ]
   };
 
   return transporter.sendMail(mailOptions);
