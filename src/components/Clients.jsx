@@ -53,6 +53,15 @@ export default function Clients({ setNotification }) {
   const [status, setStatus] = useState('Active');
   const [testingSmtp, setTestingSmtp] = useState(false);
 
+  // Candidate Outreach Template Modal State (Matching Reference Images 2 & 3)
+  const [isTemplateOpen, setIsTemplateOpen] = useState(false);
+  const [templateClient, setTemplateClient] = useState(null);
+  const [resumeAnalysis, setResumeAnalysis] = useState('');
+  const [targetJobRoles, setTargetJobRoles] = useState('');
+  const [coverLetterText, setCoverLetterText] = useState('');
+  const [isDocPreviewResume, setIsDocPreviewResume] = useState(false);
+  const [isDocPreviewCoverLetter, setIsDocPreviewCoverLetter] = useState(false);
+
   useEffect(() => {
     fetchClients();
   }, []);
@@ -65,6 +74,126 @@ export default function Clients({ setNotification }) {
       }
     } catch (err) {
       console.error('Failed to load clients:', err);
+    }
+  };
+
+  const handleOpenTemplateModal = async (client) => {
+    setTemplateClient(client);
+    setResumeAnalysis(client.resume_analysis || '');
+    setTargetJobRoles(client.target_job_roles || 'Senior Software Test Engineer, QA / Software Engineer, Software Test Engineer, Automation Testing Engineer, Test Automation Lead');
+    setCoverLetterText(client.cover_letter_text || '');
+
+    try {
+      const template = JSON.parse(client.email_template);
+      setEmailTemplateSubject(template.subject || 'Experienced {role} | {role} Application at {company}');
+      setEmailTemplateBody(template.body || 'Dear {hr_name},\n\nI hope you are doing well.\n\nI am writing to express my interest in the {role} position at {company}.\n\nBest regards,\n{client_name}');
+    } catch {
+      setEmailTemplateSubject('Experienced {role} | {role} Application at {company}');
+      setEmailTemplateBody('Dear {hr_name},\n\nI hope you are doing well.\n\nI am writing to express my interest in the {role} position at {company}.\n\nBest regards,\n{client_name}');
+    }
+
+    setIsTemplateOpen(true);
+
+    // If candidate has resume text but template/analysis is missing, auto-generate!
+    if ((!client.resume_analysis || !client.cover_letter_text) && client.resume_text) {
+      handleGenerateTemplateForModal(client.resume_text, client);
+    }
+  };
+
+  const computeSamplePreview = (text, client, jobRoles) => {
+    if (!text) return '';
+    return text
+      .replace(/{hr_name}/g, 'Sarah Jenkins')
+      .replace(/{contact_name}/g, 'Sarah Jenkins')
+      .replace(/{company}/g, 'Siemens')
+      .replace(/{company_name}/g, 'Siemens')
+      .replace(/{role}/g, 'Senior QA Automation Engineer')
+      .replace(/{client_name}/g, client ? client.name : 'Candidate')
+      .replace(/{candidate_name}/g, client ? client.name : 'Candidate')
+      .replace(/{job_roles}/g, jobRoles || 'Senior QA Automation Engineer')
+      .replace(/{industry}/g, 'Technology & Consulting')
+      .replace(/{country}/g, 'Germany');
+  };
+
+  const handleDownloadTextFile = (filename, content) => {
+    const element = document.createElement('a');
+    const file = new Blob([content || 'No document content available.'], { type: 'text/plain' });
+    element.href = URL.createObjectURL(file);
+    element.download = filename;
+    document.body.appendChild(element);
+    element.click();
+    document.body.removeChild(element);
+  };
+
+  const handleGenerateTemplateForModal = async (textToUse, clientObj = null) => {
+    const currentClient = clientObj || templateClient;
+    if (!textToUse && !currentClient) return;
+    setGeneratingTemplate(true);
+    try {
+      const data = await safeFetchJson('/api/generate-template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: currentClient ? currentClient.name : name, resume_text: textToUse || resumeText })
+      });
+      if (data.success && data.template) {
+        if (data.template.resume_analysis) setResumeAnalysis(data.template.resume_analysis);
+        if (data.template.target_job_roles) setTargetJobRoles(data.template.target_job_roles);
+        if (data.template.cover_letter) setCoverLetterText(data.template.cover_letter);
+        if (data.template.subject) setEmailTemplateSubject(data.template.subject);
+        if (data.template.body) setEmailTemplateBody(data.template.body);
+        setNotification({ message: 'Outreach template & analysis generated successfully!', type: 'success' });
+      }
+    } catch (err) {
+      setNotification({ message: err.message, type: 'error' });
+    } finally {
+      setGeneratingTemplate(false);
+    }
+  };
+
+  const handleSaveTemplateModal = async () => {
+    if (!templateClient) return;
+    const payload = {
+      ...templateClient,
+      resume_analysis: resumeAnalysis,
+      target_job_roles: targetJobRoles,
+      cover_letter_text: coverLetterText,
+      email_template: JSON.stringify({ subject: emailTemplateSubject, body: emailTemplateBody })
+    };
+
+    try {
+      const data = await safeFetchJson(`/api/clients/${templateClient.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (data.success) {
+        setNotification({ message: 'Outreach template saved successfully!', type: 'success' });
+        setIsTemplateOpen(false);
+        fetchClients();
+      } else {
+        setNotification({ message: data.error || 'Failed to save template', type: 'error' });
+      }
+    } catch (err) {
+      setNotification({ message: err.message, type: 'error' });
+    }
+  };
+
+  const handleTestSMTPForTemplate = async () => {
+    if (!templateClient || !templateClient.email || !templateClient.app_password) {
+      setNotification({ message: 'Please set Gmail App Password for this candidate first.', type: 'error' });
+      return;
+    }
+    try {
+      const data = await safeFetchJson('/api/clients/test-smtp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: templateClient.name, email: templateClient.email, app_password: templateClient.app_password })
+      });
+      if (data.success) {
+        setNotification({ message: data.message || 'SMTP Connection succeeded!', type: 'success' });
+      }
+    } catch (err) {
+      setNotification({ message: err.message, type: 'error' });
     }
   };
 
@@ -336,6 +465,11 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
                     </td>
                     <td>
                       <div className="actions-row" style={{ justifyContent: 'flex-end' }}>
+                        <button className="icon-btn" title="Outreach Template" onClick={() => handleOpenTemplateModal(c)} style={{ borderColor: '#38bdf8', color: '#38bdf8' }}>
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" style={{ width: 16, height: 16 }}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                          </svg>
+                        </button>
                         <button className="icon-btn" title="Edit Client" onClick={() => handleOpenEdit(c)}>
                           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" style={{ width: 16, height: 16 }}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
@@ -355,6 +489,158 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
           </tbody>
         </table>
       </div>
+
+      {/* Candidate Outreach Template Modal (Matching Reference Images 2 & 3) */}
+      {isTemplateOpen && templateClient && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '850px', width: '95%', backgroundColor: '#0b0f19', border: '1px solid #38bdf8', borderRadius: '16px', padding: '2rem' }}>
+            {/* Header */}
+            <div className="modal-header" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem', marginBottom: '1.5rem' }}>
+              <h4 className="modal-title" style={{ fontSize: '1.4rem', fontWeight: '800', color: '#ffffff' }}>
+                {templateClient.name} &mdash; outreach template
+              </h4>
+              <button className="icon-btn" onClick={() => setIsTemplateOpen(false)}>&times;</button>
+            </div>
+
+            {/* Resume Analysis Banner */}
+            <div style={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: '10px', padding: '1.25rem', marginBottom: '1.5rem' }}>
+              <p style={{ fontSize: '0.9rem', color: '#cbd5e1', lineHeight: '1.6' }}>
+                <strong style={{ color: '#38bdf8' }}>Resume analysis:</strong> {resumeAnalysis || `${templateClient.name} is a skilled professional with proven experience delivering technical solutions across enterprise domains.`}
+              </p>
+            </div>
+
+            {/* DOCUMENTS Section */}
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.75rem' }}>DOCUMENTS</label>
+              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                {/* Resume Card */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: '#1e293b', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '0.6rem 1rem' }}>
+                  <span style={{ fontSize: '1.1rem' }}>📄</span>
+                  <span style={{ fontSize: '0.9rem', fontWeight: '700', color: '#ffffff' }}>Resume</span>
+                  <button type="button" className="btn btn-sm" style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }} onClick={() => setIsDocPreviewResume(true)}>👁️ Preview</button>
+                  <button type="button" className="btn btn-sm" style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }} onClick={() => handleDownloadTextFile(`${templateClient.name}_Resume.txt`, templateClient.resume_text || resumeAnalysis)}>⬇️ Download</button>
+                </div>
+                {/* Cover Letter Card */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: '#1e293b', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '0.6rem 1rem' }}>
+                  <span style={{ fontSize: '1.1rem' }}>📄</span>
+                  <span style={{ fontSize: '0.9rem', fontWeight: '700', color: '#ffffff' }}>Cover letter</span>
+                  <button type="button" className="btn btn-sm" style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }} onClick={() => setIsDocPreviewCoverLetter(true)}>👁️ Preview</button>
+                  <button type="button" className="btn btn-sm" style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }} onClick={() => handleDownloadTextFile(`${templateClient.name}_CoverLetter.txt`, coverLetterText)}>⬇️ Download</button>
+                </div>
+              </div>
+            </div>
+
+            {/* Outreach Log Status */}
+            <div style={{ backgroundColor: '#0f172a', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '0.85rem 1rem', marginBottom: '1.5rem', color: '#94a3b8', fontSize: '0.85rem' }}>
+              No emails sent yet for this client.
+            </div>
+
+            {/* Target Job Roles */}
+            <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+              <label style={{ color: '#cbd5e1', fontWeight: '700', fontSize: '0.85rem' }}>Target job roles (comma separated)</label>
+              <input 
+                type="text" 
+                className="form-input" 
+                value={targetJobRoles} 
+                onChange={e => setTargetJobRoles(e.target.value)} 
+                placeholder="Senior Software Test Engineer, QA / Software Engineer, Software Test Engineer, Automation Testing Engineer"
+                style={{ fontSize: '0.9rem', fontWeight: '600' }}
+              />
+            </div>
+
+            {/* Email Subject */}
+            <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+              <label style={{ color: '#cbd5e1', fontWeight: '700', fontSize: '0.85rem' }}>Email subject</label>
+              <input 
+                type="text" 
+                className="form-input" 
+                value={emailTemplateSubject} 
+                onChange={e => setEmailTemplateSubject(e.target.value)} 
+                placeholder="Experienced QA Automation Engineer | {role} Application at {company}"
+                style={{ fontSize: '0.9rem', fontWeight: '600' }}
+              />
+            </div>
+
+            {/* Email Body */}
+            <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+              <label style={{ color: '#cbd5e1', fontWeight: '700', fontSize: '0.85rem' }}>
+                Email body &mdash; placeholders: <code style={{ color: '#38bdf8' }}>{`{hr_name}`}</code> <code style={{ color: '#38bdf8' }}>{`{company}`}</code> <code style={{ color: '#38bdf8' }}>{`{role}`}</code> <code style={{ color: '#38bdf8' }}>{`{client_name}`}</code> <code style={{ color: '#38bdf8' }}>{`{job_roles}`}</code> <code style={{ color: '#38bdf8' }}>{`{industry}`}</code> <code style={{ color: '#38bdf8' }}>{`{country}`}</code>
+              </label>
+              <textarea 
+                className="form-textarea" 
+                value={emailTemplateBody} 
+                onChange={e => setEmailTemplateBody(e.target.value)} 
+                placeholder="Dear {hr_name},&#10;&#10;I hope you are doing well...&#10;&#10;Best regards,&#10;{client_name}"
+                style={{ minHeight: '180px', fontSize: '0.9rem', fontFamily: 'var(--font-body)', lineHeight: '1.6' }}
+              />
+            </div>
+
+            {/* LIVE PREVIEW Section */}
+            <div style={{ marginBottom: '2rem' }}>
+              <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.5rem' }}>LIVE PREVIEW</label>
+              <div className="preview-box" style={{ maxHeight: '220px', overflowY: 'auto', backgroundColor: '#050814', border: '1px solid #1e293b', padding: '1rem', borderRadius: '8px', fontSize: '0.85rem', color: '#f8fafc', lineHeight: '1.6' }}>
+                <div style={{ fontWeight: 'bold', marginBottom: '0.5rem', color: '#38bdf8' }}>
+                  Subject: {computeSamplePreview(emailTemplateSubject, templateClient, targetJobRoles)}
+                </div>
+                {computeSamplePreview(emailTemplateBody, templateClient, targetJobRoles)}
+              </div>
+            </div>
+
+            {/* Action Buttons Footer (Matching Reference Image 3) */}
+            <div className="modal-footer" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <button type="button" className="btn" onClick={() => setNotification({ message: 'No replies received yet for this candidate.', type: 'success' })}>
+                  🔄 Check replies
+                </button>
+                <button type="button" className="btn" onClick={handleTestSMTPForTemplate}>
+                  Test Gmail login
+                </button>
+                <button type="button" className="btn" onClick={() => handleGenerateTemplateForModal(templateClient.resume_text)} disabled={generatingTemplate}>
+                  {generatingTemplate ? 'Regenerating...' : '🔄 Regenerate (AI)'}
+                </button>
+              </div>
+              <button type="button" className="btn btn-primary" onClick={handleSaveTemplateModal} style={{ backgroundColor: '#7c3aed', borderColor: '#a78bfa' }}>
+                Save template
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Document Preview Modals */}
+      {isDocPreviewResume && templateClient && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '700px' }}>
+            <div className="modal-header">
+              <h4 className="modal-title">📄 {templateClient.name} — Resume Preview</h4>
+              <button className="icon-btn" onClick={() => setIsDocPreviewResume(false)}>&times;</button>
+            </div>
+            <div className="preview-box" style={{ maxHeight: '450px', overflowY: 'auto', whiteSpace: 'pre-wrap', marginTop: '1rem' }}>
+              {templateClient.resume_text || 'No resume details available.'}
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-primary" onClick={() => setIsDocPreviewResume(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isDocPreviewCoverLetter && templateClient && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '700px' }}>
+            <div className="modal-header">
+              <h4 className="modal-title">📄 {templateClient.name} — Cover Letter Preview</h4>
+              <button className="icon-btn" onClick={() => setIsDocPreviewCoverLetter(false)}>&times;</button>
+            </div>
+            <div className="preview-box" style={{ maxHeight: '450px', overflowY: 'auto', whiteSpace: 'pre-wrap', marginTop: '1rem' }}>
+              {coverLetterText || 'No cover letter generated.'}
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-primary" onClick={() => setIsDocPreviewCoverLetter(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit client Modal */}
       {isOpen && (
@@ -451,7 +737,7 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
                     accept=".txt,.md,.pdf" 
                     style={{ display: 'none' }}
                     onClick={e => { e.target.value = null; }}
-                    onChange={e => handleUploadResumeTextFile(e.target.files[0])}
+                    onChange={e => handleResumeFileUpload(e.target.files[0])}
                   />
                   <button type="button" className="btn btn-sm" onClick={() => document.getElementById('resumeTextInput').click()}>
                     📎 Choose .txt / .md / .pdf Resume File

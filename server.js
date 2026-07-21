@@ -76,11 +76,11 @@ app.get('/api/clients', async (req, res) => {
 
 app.post('/api/clients', async (req, res) => {
   try {
-    const { name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, email_template, status } = req.body;
+    const { name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, email_template, status, resume_analysis, cover_letter_text, target_job_roles, resume_filename, cover_letter_filename } = req.body;
     const result = await dbRun(
-      `INSERT INTO clients (name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, email_template, status) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, email_template, status || 'Active']
+      `INSERT INTO clients (name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, email_template, status, resume_analysis, cover_letter_text, target_job_roles, resume_filename, cover_letter_filename) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, email_template, status || 'Active', resume_analysis || '', cover_letter_text || '', target_job_roles || '', resume_filename || '', cover_letter_filename || '']
     );
     res.json({ success: true, id: result.id });
   } catch (error) {
@@ -91,11 +91,12 @@ app.post('/api/clients', async (req, res) => {
 app.put('/api/clients/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, email_template, status } = req.body;
+    const { name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, email_template, status, resume_analysis, cover_letter_text, target_job_roles, resume_filename, cover_letter_filename } = req.body;
     await dbRun(
       `UPDATE clients SET name = ?, email = ?, app_password = ?, enrollment_id = ?, mobile = ?, 
-       target_industries = ?, target_countries = ?, resume_text = ?, email_template = ?, status = ? WHERE id = ?`,
-      [name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, email_template, status, id]
+       target_industries = ?, target_countries = ?, resume_text = ?, email_template = ?, status = ?,
+       resume_analysis = ?, cover_letter_text = ?, target_job_roles = ?, resume_filename = ?, cover_letter_filename = ? WHERE id = ?`,
+      [name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, email_template, status, resume_analysis || '', cover_letter_text || '', target_job_roles || '', resume_filename || '', cover_letter_filename || '', id]
     );
     res.json({ success: true });
   } catch (error) {
@@ -131,35 +132,43 @@ app.post('/api/generate-template', async (req, res) => {
   try {
     const { name, resume_text } = req.body;
     const settings = await getSettingsMap();
+    const candidateName = name || 'Candidate';
+
     if (!settings.gemini_api_key) {
-    const fallbackTemplate = {
-      subject: `Application for {role} role at {company_name} - {candidate_name}`,
-      body: `Hi {contact_name},\n\nI hope this email finds you well. I am reaching out to express my strong interest in potential {role} opportunities at {company_name}.\n\nGiven my background in the {industry} sector and extensive technical experience, I believe I can add immediate value to your team. I have attached my resume details for your review.\n\nI would welcome the opportunity for a brief conversation to discuss how my skills align with your upcoming goals.\n\nBest regards,\n{candidate_name}\n{candidate_email}`
-    };
-    return res.json({ success: true, template: fallbackTemplate, isFallback: true });
-  }
+      const fallbackTemplate = {
+        resume_analysis: `${candidateName} is an experienced professional with specialized technical skills and a proven track record of delivering end-to-end solutions across digital platforms.`,
+        target_job_roles: 'Senior Software Engineer, QA / Software Engineer, Software Test Engineer, Automation Testing Engineer, Test Automation Lead',
+        cover_letter: `Dear Hiring Manager,\n\nI am writing to express my strong interest in relevant opportunities at your organization. With extensive technical experience and a history of quality delivery, I am confident in my ability to add immediate value to your engineering initiatives.\n\nThank you for considering my application.\n\nBest regards,\n${candidateName}`,
+        subject: `Experienced {role} | {role} Application at {company}`,
+        body: `Dear {hr_name},\n\nI hope you are doing well.\n\nI am writing to express my interest in the {role} position at {company}. With my background in {industry} and strong technical expertise, I have delivered end-to-end solutions that accelerate release readiness and improve overall quality.\n\nI am particularly interested in opportunities at {company} where I can contribute to complex engineering projects. I am open to discussing how my experience aligns with your team's goals.\n\nThank you for your time and consideration.\n\nBest regards,\n${candidateName}`
+      };
+      return res.json({ success: true, template: fallbackTemplate, isFallback: true });
+    }
     
     const genAI = new GoogleGenerativeAI(settings.gemini_api_key);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
     
     const prompt = `
 You are an expert career advisor and cold outreach specialist. 
-Based on the candidate's resume, craft a highly professional, polite, and persuasive outreach email template that can be sent to Hiring Managers/HR contacts.
-The template MUST use the following placeholders so we can dynamically personalize it later:
-- {contact_name} for the recipient's name
-- {company_name} for the recipient's company name
-- {role} for the recipient's job role / title
-- {industry} for the recipient's industry
-- {candidate_name} for the candidate's name (${name || 'Candidate'})
-- {candidate_email} for the candidate's email
+Based on the candidate's resume, generate a complete outreach package.
+The outreach email body MUST use these exact placeholders:
+- {hr_name} for recipient HR name
+- {company} for target company name
+- {role} for target job position
+- {client_name} for candidate name (${candidateName})
+- {job_roles} for candidate target job titles
+- {industry} for industry sector
+- {country} for country
 
-Keep the email concise, structured, and easy to read. Write a compelling subject and body.
-Return a JSON structure exactly like this:
+Return a JSON object with EXACTLY these 5 fields:
 {
-  "subject": "Interested in roles at {company_name} - {candidate_name}",
-  "body": "Hi {contact_name},\\n\\n[professional, compelling email content mentioning details like {role} and {industry}]\\n\\nBest regards,\\n{candidate_name}"
+  "resume_analysis": "1-2 sentence concise summary of candidate skills and experience",
+  "target_job_roles": "Comma-separated list of 4-6 matching target job roles",
+  "cover_letter": "Professional, well-written cover letter text for the candidate",
+  "subject": "Experienced {role} | {role} Application at {company}",
+  "body": "Dear {hr_name},\\n\\nI hope you are doing well.\\n\\nI am writing to express my interest in the {role} position at {company}...\\n\\nBest regards,\\n{client_name}"
 }
-Ensure the output is valid JSON. If you use markdown code fences, use \`\`\`json.
+Ensure output is valid JSON.
 
 Candidate Resume Content:
 ${resume_text || 'General candidate profile.'}
