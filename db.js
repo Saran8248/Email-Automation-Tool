@@ -119,5 +119,10 @@ export async function initDb() {
   for (const [key, value] of Object.entries(defaults)) {
     await dbRun(`INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)`, [key, value]);
   }
+
+  // Ensure automatic background scheduler is OFF by default so emails send ONLY on Trigger button click
+  try {
+    await dbRun(`UPDATE settings SET value = 'false' WHERE key = 'is_scheduler_active' AND value IS NULL`);
+  } catch(e) {}
 }
 export default db;

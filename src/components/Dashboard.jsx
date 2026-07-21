@@ -111,11 +111,12 @@ export default function Dashboard({ stats, logs, triggerCampaign, triggerInProgr
               className="btn btn-primary"
               onClick={triggerCampaign}
               disabled={triggerInProgress || stats.active === 0}
+              style={{ minWidth: '220px', padding: '0.75rem 1.5rem', fontWeight: 600 }}
             >
-              {triggerInProgress ? 'Sending Campaign...' : 'Trigger Outreach Campaign Now'}
+              {triggerInProgress ? 'Sending Campaign...' : '🚀 Trigger Outreach Campaign Now'}
             </button>
-            <span className="page-subtitle">
-              Sends emails to active, unsent contacts based on your settings.
+            <span className="page-subtitle" style={{ color: 'var(--text-secondary)' }}>
+              Emails are sent <strong>ONLY when you click this button</strong> (up to each candidate's daily limit).
             </span>
           </div>
         </div>
