@@ -83,13 +83,15 @@ export default function Clients({ setNotification }) {
     setTargetJobRoles(client.target_job_roles || 'Senior Software Test Engineer, QA / Software Engineer, Software Test Engineer, Automation Testing Engineer, Test Automation Lead');
     setCoverLetterText(client.cover_letter_text || '');
 
+    const defaultBody = `Dear {hr_name},\n\nI hope this email finds you well.\n\nI am writing to express my strong interest in potential {role} opportunities at {company}. With extensive hands-on experience in {industry} and a proven track record of engineering scalable automation solutions, I have consistently driven quality releases, reduced testing overhead, and accelerated release readiness across complex digital platforms.\n\nIn my recent roles, I have led the design and implementation of end-to-end test automation frameworks, automated comprehensive regression scenarios, and integrated continuous testing pipelines into CI/CD workflows. My expertise spans test automation, API testing, framework architecture, and cross-functional Agile delivery.\n\nI am particularly impressed by {company}'s ongoing innovation and global engineering impact. I would welcome the opportunity to discuss how my technical expertise, domain knowledge, and passion for software quality can add immediate value to your engineering team and upcoming projects.\n\nThank you for your time and consideration. I look forward to connecting with you soon.\n\nBest regards,\n{client_name}`;
+
     try {
       const template = JSON.parse(client.email_template);
       setEmailTemplateSubject(template.subject || 'Experienced {role} | {role} Application at {company}');
-      setEmailTemplateBody(template.body || 'Dear {hr_name},\n\nI hope you are doing well.\n\nI am writing to express my interest in the {role} position at {company}.\n\nBest regards,\n{client_name}');
+      setEmailTemplateBody(template.body || defaultBody);
     } catch {
       setEmailTemplateSubject('Experienced {role} | {role} Application at {company}');
-      setEmailTemplateBody('Dear {hr_name},\n\nI hope you are doing well.\n\nI am writing to express my interest in the {role} position at {company}.\n\nBest regards,\n{client_name}');
+      setEmailTemplateBody(defaultBody);
     }
 
     setIsTemplateOpen(true);

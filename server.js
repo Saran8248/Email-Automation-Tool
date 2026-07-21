@@ -140,7 +140,7 @@ app.post('/api/generate-template', async (req, res) => {
         target_job_roles: 'Senior Software Engineer, QA / Software Engineer, Software Test Engineer, Automation Testing Engineer, Test Automation Lead',
         cover_letter: `Dear Hiring Manager,\n\nI am writing to express my strong interest in relevant opportunities at your organization. With extensive technical experience and a history of quality delivery, I am confident in my ability to add immediate value to your engineering initiatives.\n\nThank you for considering my application.\n\nBest regards,\n${candidateName}`,
         subject: `Experienced {role} | {role} Application at {company}`,
-        body: `Dear {hr_name},\n\nI hope you are doing well.\n\nI am writing to express my interest in the {role} position at {company}. With my background in {industry} and strong technical expertise, I have delivered end-to-end solutions that accelerate release readiness and improve overall quality.\n\nI am particularly interested in opportunities at {company} where I can contribute to complex engineering projects. I am open to discussing how my experience aligns with your team's goals.\n\nThank you for your time and consideration.\n\nBest regards,\n${candidateName}`
+        body: `Dear {hr_name},\n\nI hope this email finds you well.\n\nI am writing to express my strong interest in potential {role} opportunities at {company}. With extensive hands-on experience in {industry} and a proven track record of engineering scalable automation solutions, I have consistently driven quality releases, reduced testing overhead, and accelerated release readiness across complex digital platforms.\n\nIn my recent roles, I have led the design and implementation of end-to-end test automation frameworks, automated comprehensive regression scenarios, and integrated continuous testing pipelines into CI/CD workflows. My expertise spans test automation, API testing, framework architecture, and cross-functional Agile delivery.\n\nI am particularly impressed by {company}'s ongoing innovation and global engineering impact. I would welcome the opportunity to discuss how my technical expertise, domain knowledge, and passion for software quality can add immediate value to your engineering team and upcoming projects.\n\nThank you for your time and consideration. I look forward to connecting with you soon.\n\nBest regards,\n{client_name}`
       };
       return res.json({ success: true, template: fallbackTemplate, isFallback: true });
     }
@@ -150,7 +150,10 @@ app.post('/api/generate-template', async (req, res) => {
     
     const prompt = `
 You are an expert career advisor and cold outreach specialist. 
-Based on the candidate's resume, generate a complete outreach package.
+Based on the candidate's resume, generate a complete, highly persuasive outreach package.
+CRITICAL REQUIREMENT FOR EMAIL BODY:
+The outreach email body MUST be a detailed, comprehensive 4-5 paragraph email (NOT short 1-2 lines). It must highlight candidate technical experience, framework architecture, achievements, and value proposal.
+
 The outreach email body MUST use these exact placeholders:
 - {hr_name} for recipient HR name
 - {company} for target company name
@@ -166,7 +169,7 @@ Return a JSON object with EXACTLY these 5 fields:
   "target_job_roles": "Comma-separated list of 4-6 matching target job roles",
   "cover_letter": "Professional, well-written cover letter text for the candidate",
   "subject": "Experienced {role} | {role} Application at {company}",
-  "body": "Dear {hr_name},\\n\\nI hope you are doing well.\\n\\nI am writing to express my interest in the {role} position at {company}...\\n\\nBest regards,\\n{client_name}"
+  "body": "Dear {hr_name},\\n\\nI hope this email finds you well.\\n\\nI am writing to express my strong interest in potential {role} opportunities at {company}... [4-5 rich, professional paragraphs detailing experience, framework engineering, and value proposition]\\n\\nBest regards,\\n{client_name}"
 }
 Ensure output is valid JSON.
 
