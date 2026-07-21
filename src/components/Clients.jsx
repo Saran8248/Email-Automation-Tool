@@ -44,6 +44,7 @@ export default function Clients({ setNotification }) {
   const [appPassword, setAppPassword] = useState('');
   const [enrollmentId, setEnrollmentId] = useState('');
   const [mobile, setMobile] = useState('');
+  const [dailyLimit, setDailyLimit] = useState(10);
   const [selectedIndustries, setSelectedIndustries] = useState([]);
   const [selectedCountries, setSelectedCountries] = useState([]);
   const [resumeText, setResumeText] = useState('');
@@ -206,6 +207,7 @@ export default function Clients({ setNotification }) {
     setAppPassword('');
     setEnrollmentId('');
     setMobile('');
+    setDailyLimit(10);
     setSelectedIndustries([]);
     setSelectedCountries([]);
     setResumeText('');
@@ -222,6 +224,7 @@ export default function Clients({ setNotification }) {
     setAppPassword(client.app_password || '');
     setEnrollmentId(client.enrollment_id || '');
     setMobile(client.mobile || '');
+    setDailyLimit(client.daily_limit || 10);
     setStatus(client.status || 'Active');
     setResumeText(client.resume_text || '');
     
@@ -280,7 +283,8 @@ export default function Clients({ setNotification }) {
       status,
       resume_analysis: resumeAnalysis,
       target_job_roles: targetJobRoles,
-      cover_letter_text: coverLetterText
+      cover_letter_text: coverLetterText,
+      daily_limit: dailyLimit
     };
 
     try {
@@ -682,10 +686,14 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
                 <div className="form-group">
                   <label>Mobile number</label>
                   <input type="text" className="form-input" value={mobile} onChange={e => setMobile(e.target.value)} placeholder="9543974755" />
+                </div>
+                <div className="form-group">
+                  <label>Daily Email Limit (Max per day)</label>
+                  <input type="number" min="1" max="500" className="form-input" value={dailyLimit} onChange={e => setDailyLimit(e.target.value)} placeholder="10" />
                 </div>
                 <div className="form-group">
                   <label>Status</label>

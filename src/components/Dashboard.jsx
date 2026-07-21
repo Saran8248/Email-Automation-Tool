@@ -5,7 +5,7 @@ export default function Dashboard({ stats, logs, triggerCampaign, triggerInProgr
 
   return (
     <div>
-      <div className="stats-grid">
+      <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
         <div className="stat-card">
           <div className="stat-icon-wrapper purple">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -14,7 +14,7 @@ export default function Dashboard({ stats, logs, triggerCampaign, triggerInProgr
           </div>
           <div className="stat-info">
             <span className="stat-value">{stats.total}</span>
-            <span className="stat-label">Total Clients / Contacts</span>
+            <span className="stat-label">Total Candidates</span>
           </div>
         </div>
 
@@ -26,7 +26,7 @@ export default function Dashboard({ stats, logs, triggerCampaign, triggerInProgr
           </div>
           <div className="stat-info">
             <span className="stat-value">{stats.active}</span>
-            <span className="stat-label">Available for Outreach</span>
+            <span className="stat-label">Active Profiles</span>
           </div>
         </div>
 
@@ -51,6 +51,31 @@ export default function Dashboard({ stats, logs, triggerCampaign, triggerInProgr
           <div className="stat-info">
             <span className="stat-value">{stats.failed}</span>
             <span className="stat-label">Failed Outreach</span>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon-wrapper blue" style={{ backgroundColor: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8' }}>
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.573 16.49 16.638 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+            </svg>
+          </div>
+          <div className="stat-info">
+            <span className="stat-value">{stats.opened || 0}</span>
+            <span className="stat-label">Emails Opened</span>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon-wrapper purple" style={{ backgroundColor: 'rgba(168, 85, 247, 0.15)', color: '#a855f7' }}>
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a.75.75 0 0 1-1.041-.85c.162-.832.559-2.072 1.053-3.136C4.015 15.602 3 13.89 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
+            </svg>
+          </div>
+          <div className="stat-info">
+            <span className="stat-value">{stats.replied || 0}</span>
+            <span className="stat-label">Responses Received</span>
           </div>
         </div>
       </div>

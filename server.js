@@ -76,11 +76,11 @@ app.get('/api/clients', async (req, res) => {
 
 app.post('/api/clients', async (req, res) => {
   try {
-    const { name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, email_template, status, resume_analysis, cover_letter_text, target_job_roles, resume_filename, cover_letter_filename } = req.body;
+    const { name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, email_template, status, resume_analysis, cover_letter_text, target_job_roles, resume_filename, cover_letter_filename, daily_limit } = req.body;
     const result = await dbRun(
-      `INSERT INTO clients (name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, email_template, status, resume_analysis, cover_letter_text, target_job_roles, resume_filename, cover_letter_filename) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, email_template, status || 'Active', resume_analysis || '', cover_letter_text || '', target_job_roles || '', resume_filename || '', cover_letter_filename || '']
+      `INSERT INTO clients (name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, email_template, status, resume_analysis, cover_letter_text, target_job_roles, resume_filename, cover_letter_filename, daily_limit) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, email_template, status || 'Active', resume_analysis || '', cover_letter_text || '', target_job_roles || '', resume_filename || '', cover_letter_filename || '', parseInt(daily_limit) || 10]
     );
     res.json({ success: true, id: result.id });
   } catch (error) {
@@ -91,12 +91,12 @@ app.post('/api/clients', async (req, res) => {
 app.put('/api/clients/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, email_template, status, resume_analysis, cover_letter_text, target_job_roles, resume_filename, cover_letter_filename } = req.body;
+    const { name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, email_template, status, resume_analysis, cover_letter_text, target_job_roles, resume_filename, cover_letter_filename, daily_limit } = req.body;
     await dbRun(
       `UPDATE clients SET name = ?, email = ?, app_password = ?, enrollment_id = ?, mobile = ?, 
        target_industries = ?, target_countries = ?, resume_text = ?, email_template = ?, status = ?,
-       resume_analysis = ?, cover_letter_text = ?, target_job_roles = ?, resume_filename = ?, cover_letter_filename = ? WHERE id = ?`,
-      [name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, email_template, status, resume_analysis || '', cover_letter_text || '', target_job_roles || '', resume_filename || '', cover_letter_filename || '', id]
+       resume_analysis = ?, cover_letter_text = ?, target_job_roles = ?, resume_filename = ?, cover_letter_filename = ?, daily_limit = ? WHERE id = ?`,
+      [name, email, app_password, enrollment_id, mobile, target_industries, target_countries, resume_text, email_template, status, resume_analysis || '', cover_letter_text || '', target_job_roles || '', resume_filename || '', cover_letter_filename || '', parseInt(daily_limit) || 10, id]
     );
     res.json({ success: true });
   } catch (error) {
@@ -786,6 +786,8 @@ async function runDailyCampaign() {
   let totalFailed = 0;
 
   for (const client of activeClients) {
+    const candidateLimit = client.daily_limit ? parseInt(client.daily_limit) : (parseInt(settings.daily_limit) || 10);
+    
     // Determine matches based on client's target industries and target countries
     let targetCountries = [];
     let targetIndustries = [];
@@ -799,11 +801,9 @@ async function runDailyCampaign() {
 
     // Filter contacts matching targets and not emailed by this client yet
     const matchingContacts = allContacts.filter(contact => {
-      // Country match (if candidate target is configured)
       if (targetCountries.length > 0 && contact.country) {
         if (!targetCountries.includes(contact.country)) return false;
       }
-      // Industry match (if candidate target is configured)
       if (targetIndustries.length > 0 && contact.industry) {
         if (!targetIndustries.includes(contact.industry)) return false;
       }
@@ -819,7 +819,7 @@ async function runDailyCampaign() {
     
     const candidateTodoContacts = matchingContacts.filter(
       contact => !sentEmailsList.includes(contact.email)
-    ).slice(0, limitPerCandidate);
+    ).slice(0, candidateLimit);
 
     console.log(`Candidate ${client.name} has ${candidateTodoContacts.length} target contacts to email today.`);
 

@@ -61,7 +61,7 @@ export async function initDb() {
     )
   `);
 
-  // Add email_template and candidate document columns if they don't exist (for existing databases)
+  try { await dbRun(`ALTER TABLE clients ADD COLUMN daily_limit INTEGER DEFAULT 10`); } catch (err) {}
   try { await dbRun(`ALTER TABLE clients ADD COLUMN email_template TEXT`); } catch (err) {}
   try { await dbRun(`ALTER TABLE clients ADD COLUMN resume_analysis TEXT`); } catch (err) {}
   try { await dbRun(`ALTER TABLE clients ADD COLUMN cover_letter_text TEXT`); } catch (err) {}
