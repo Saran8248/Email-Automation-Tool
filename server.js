@@ -570,22 +570,51 @@ app.post('/api/clients/test-smtp', async (req, res) => {
   }
 });
 
-// Core Gemini content generator
+// Core email content generator
 async function generateEmailContent(client, contact, settings) {
+  const replacePlaceholders = (text) => {
+    if (!text) return '';
+    let result = text;
+
+    // Determine cleanest target role for the email
+    const cleanRole = (contact.role && contact.role.trim().length > 0) 
+      ? contact.role.trim() 
+      : (client.target_job_roles ? client.target_job_roles.split(',')[0].trim() : 'Senior QA Automation Engineer');
+
+    // Determine cleanest HR recipient name
+    const cleanHrName = (contact.name && contact.name.trim().length > 0) 
+      ? contact.name.trim() 
+      : 'Hiring Manager';
+
+    // Determine cleanest company name
+    const cleanCompany = (contact.company && contact.company.trim().length > 0) 
+      ? contact.company.trim() 
+      : 'your organization';
+
+    result = result
+      .replace(/{hr_name}/g, cleanHrName)
+      .replace(/{contact_name}/g, cleanHrName)
+      .replace(/{company}/g, cleanCompany)
+      .replace(/{company_name}/g, cleanCompany)
+      .replace(/{role}/g, cleanRole)
+      .replace(/{job_roles}/g, client.target_job_roles || cleanRole)
+      .replace(/{client_name}/g, client.name || '')
+      .replace(/{candidate_name}/g, client.name || '')
+      .replace(/{candidate_email}/g, client.email || '')
+      .replace(/{candidate_mobile}/g, client.mobile || '')
+      .replace(/{industry}/g, contact.industry || 'Technology & Consulting')
+      .replace(/{country}/g, contact.country || '');
+
+    // Cleanup any unreplaced {placeholder} tags so NO email contains raw curly braces
+    result = result.replace(/\{[a-zA-Z0-9_]+\}/g, '');
+
+    return result;
+  };
+
   if (client.email_template) {
     try {
       const template = JSON.parse(client.email_template);
       if (template.subject && template.body) {
-        const replacePlaceholders = (text) => {
-          return text
-            .replace(/{contact_name}/g, contact.name || 'Hiring Manager')
-            .replace(/{company_name}/g, contact.company || 'your company')
-            .replace(/{role}/g, contact.role || 'Hiring Team')
-            .replace(/{industry}/g, contact.industry || 'your industry')
-            .replace(/{candidate_name}/g, client.name || '')
-            .replace(/{candidate_email}/g, client.email || '')
-            .replace(/{candidate_mobile}/g, client.mobile || '');
-        };
         return {
           subject: replacePlaceholders(template.subject),
           body: replacePlaceholders(template.body)
@@ -597,22 +626,22 @@ async function generateEmailContent(client, contact, settings) {
   }
 
   if (!settings.gemini_api_key) {
+    const roleText = (contact.role && contact.role.trim().length > 0) ? contact.role : 'Senior QA Automation Engineer';
+    const compText = (contact.company && contact.company.trim().length > 0) ? contact.company : 'your organization';
     return {
-      subject: `Application for ${contact.role || 'Opportunity'} at ${contact.company || 'your team'} - ${client.name}`,
-      body: `Hi ${contact.name || 'Hiring Manager'},\n\nI hope you are having a great week. I am reaching out to express my strong interest in ${contact.role || 'relevant opportunities'} at ${contact.company || 'your company'}.\n\nWith my background and expertise in ${contact.industry || 'the industry'}, I am confident in my ability to contribute effectively to your team. Please find my resume details below:\n\n${client.resume_text || ''}\n\nI would love the opportunity to connect for a quick 10-minute call to introduce myself.\n\nBest regards,\n${client.name}\n${client.email}`
+      subject: `Experienced ${roleText} | ${roleText} Application at ${compText}`,
+      body: replacePlaceholders(`Dear {hr_name},\n\nI hope this email finds you well.\n\nI am writing to express my strong interest in potential {role} opportunities at {company}. With extensive hands-on experience in {industry} and a proven track record of engineering scalable automation solutions, I have consistently driven quality releases, reduced testing overhead, and accelerated release readiness across complex digital platforms.\n\nIn my recent roles, I have led the design and implementation of end-to-end test automation frameworks, automated comprehensive regression scenarios, and integrated continuous testing pipelines into CI/CD workflows. My expertise spans test automation, API testing, framework architecture, and cross-functional Agile delivery.\n\nI am particularly impressed by {company}'s ongoing innovation and global engineering impact. I would welcome the opportunity to discuss how my technical expertise, domain knowledge, and passion for software quality can add immediate value to your engineering team and upcoming projects.\n\nThank you for your time and consideration. I look forward to connecting with you soon.\n\nBest regards,\n{client_name}`)
     };
   }
 
   const genAI = new GoogleGenerativeAI(settings.gemini_api_key);
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-  const defaultPrompt = `You are a professional candidate applying for jobs. Based on my resume and the recipient's details (Company, Industry, Role), craft a personalized, compelling, and concise cold outreach email.
+  const prompt = `
+You are a professional candidate applying for jobs. Based on my resume and the recipient's details (Company, Industry, Role), craft a personalized, compelling, and concise cold outreach email.
 Keep the email structured, clear, and professional. Ensure it explains why I am interested in their company and how my skills align. Focus on a clear call-to-action (e.g., a brief call or review of my attached resume).
 
-Do not include subject line placeholders in the body; only output the clean body of the email.`;
-
-  const prompt = `
-${defaultPrompt}
+Do not include subject line placeholders in the body; only output the clean body of the email.
 
 My Profile & Resume Details (Candidate):
 - Name: ${client.name}
@@ -625,17 +654,17 @@ ${client.resume_text || 'No resume details provided. Please generate a general p
 ---
 
 Recipient Details (Hiring Contact):
-- Name: ${contact.name}
+- Name: ${contact.name || 'Hiring Manager'}
 - Email: ${contact.email}
-- Company: ${contact.company || 'Target Company'}
-- Job Role: ${contact.role || 'Hiring Manager'}
+- Company: ${contact.company || 'your organization'}
+- Job Role: ${contact.role || (client.target_job_roles ? client.target_job_roles.split(',')[0] : 'Software Engineer')}
 - Industry: ${contact.industry || 'relevant sector'}
 - Country: ${contact.country || 'N/A'}
 
 Generate the email now. Return a JSON structure exactly like this:
 {
   "subject": "personalized subject line",
-  "body": "Hi ${contact.name},\\n\\n[professional cover letter style body of the email]\\n\\nBest regards,\\n${client.name}"
+  "body": "Dear ${contact.name || 'Hiring Manager'},\\n\\n[professional cover letter style body of the email]\\n\\nBest regards,\\n${client.name}"
 }
 Ensure the output is valid JSON. If you use code fences, use \`\`\`json.
 `;
@@ -650,11 +679,15 @@ Ensure the output is valid JSON. If you use code fences, use \`\`\`json.
   }
 
   try {
-    return JSON.parse(text);
+    const parsed = JSON.parse(text);
+    return {
+      subject: replacePlaceholders(parsed.subject),
+      body: replacePlaceholders(parsed.body)
+    };
   } catch (e) {
     console.error('Failed to parse Gemini response JSON. Text:', text);
     let subject = `Application for ${contact.role || 'Software Role'} - ${client.name}`;
-    return { subject, body: text };
+    return { subject: replacePlaceholders(subject), body: replacePlaceholders(text) };
   }
 }
 
