@@ -577,19 +577,30 @@ async function generateEmailContent(client, contact, settings) {
     let result = text;
 
     // Determine cleanest target role for the email
-    const cleanRole = (contact.role && contact.role.trim().length > 0) 
-      ? contact.role.trim() 
-      : (client.target_job_roles ? client.target_job_roles.split(',')[0].trim() : 'Senior QA Automation Engineer');
+    let cleanRole = 'Software Engineer';
+    if (contact.role && contact.role.trim().length > 0 && !contact.role.includes('{') && contact.role.toLowerCase() !== 'hiring team') {
+      cleanRole = contact.role.trim();
+    } else if (client.target_job_roles && client.target_job_roles.trim().length > 0) {
+      cleanRole = client.target_job_roles.split(',')[0].trim();
+    }
 
     // Determine cleanest HR recipient name
-    const cleanHrName = (contact.name && contact.name.trim().length > 0) 
-      ? contact.name.trim() 
-      : 'Hiring Manager';
+    let cleanHrName = 'Hiring Manager';
+    if (contact.name && contact.name.trim().length > 0 && !contact.name.includes('{') && contact.name !== 'HR Contact') {
+      cleanHrName = contact.name.trim();
+    }
 
     // Determine cleanest company name
-    const cleanCompany = (contact.company && contact.company.trim().length > 0) 
-      ? contact.company.trim() 
-      : 'your organization';
+    let cleanCompany = 'your organization';
+    if (contact.company && contact.company.trim().length > 0 && !contact.company.includes('{')) {
+      cleanCompany = contact.company.trim();
+    }
+
+    // Determine cleanest candidate name
+    let cleanClientName = 'Candidate';
+    if (client.name && client.name.trim().length > 0 && !client.name.includes('{')) {
+      cleanClientName = client.name.trim();
+    }
 
     result = result
       .replace(/{hr_name}/g, cleanHrName)
@@ -598,8 +609,8 @@ async function generateEmailContent(client, contact, settings) {
       .replace(/{company_name}/g, cleanCompany)
       .replace(/{role}/g, cleanRole)
       .replace(/{job_roles}/g, client.target_job_roles || cleanRole)
-      .replace(/{client_name}/g, client.name || '')
-      .replace(/{candidate_name}/g, client.name || '')
+      .replace(/{client_name}/g, cleanClientName)
+      .replace(/{candidate_name}/g, cleanClientName)
       .replace(/{candidate_email}/g, client.email || '')
       .replace(/{candidate_mobile}/g, client.mobile || '')
       .replace(/{industry}/g, contact.industry || 'Technology & Consulting')
@@ -626,11 +637,9 @@ async function generateEmailContent(client, contact, settings) {
   }
 
   if (!settings.gemini_api_key) {
-    const roleText = (contact.role && contact.role.trim().length > 0) ? contact.role : 'Senior QA Automation Engineer';
-    const compText = (contact.company && contact.company.trim().length > 0) ? contact.company : 'your organization';
     return {
-      subject: `Experienced ${roleText} | ${roleText} Application at ${compText}`,
-      body: replacePlaceholders(`Dear {hr_name},\n\nI hope this email finds you well.\n\nI am writing to express my strong interest in potential {role} opportunities at {company}. With extensive hands-on experience in {industry} and a proven track record of engineering scalable automation solutions, I have consistently driven quality releases, reduced testing overhead, and accelerated release readiness across complex digital platforms.\n\nIn my recent roles, I have led the design and implementation of end-to-end test automation frameworks, automated comprehensive regression scenarios, and integrated continuous testing pipelines into CI/CD workflows. My expertise spans test automation, API testing, framework architecture, and cross-functional Agile delivery.\n\nI am particularly impressed by {company}'s ongoing innovation and global engineering impact. I would welcome the opportunity to discuss how my technical expertise, domain knowledge, and passion for software quality can add immediate value to your engineering team and upcoming projects.\n\nThank you for your time and consideration. I look forward to connecting with you soon.\n\nBest regards,\n{client_name}`)
+      subject: replacePlaceholders(`Experienced {role} | {role} Application at {company}`),
+      body: replacePlaceholders(`Dear {hr_name},\n\nI hope this email finds you well.\n\nI am writing to express my strong interest in potential {role} opportunities at {company}. With extensive technical experience in {industry} and a proven track record of engineering scalable solutions, I have consistently driven quality releases, reduced overhead, and accelerated project delivery across complex digital platforms.\n\nIn my recent projects, I have led the design and implementation of core software frameworks, automated regression test suites, and integrated continuous deployment pipelines. My expertise spans technical architecture, API development, test automation, and cross-functional Agile delivery.\n\nI am particularly impressed by {company}'s ongoing innovation and global engineering impact. I would welcome the opportunity to discuss how my technical expertise, domain knowledge, and passion for engineering excellence can add immediate value to your team and upcoming projects.\n\nThank you for your time and consideration. I look forward to connecting with you soon.\n\nBest regards,\n{client_name}`)
     };
   }
 
@@ -638,35 +647,31 @@ async function generateEmailContent(client, contact, settings) {
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
   const prompt = `
-You are a professional candidate applying for jobs. Based on my resume and the recipient's details (Company, Industry, Role), craft a personalized, compelling, and concise cold outreach email.
-Keep the email structured, clear, and professional. Ensure it explains why I am interested in their company and how my skills align. Focus on a clear call-to-action (e.g., a brief call or review of my attached resume).
+You are a career cold outreach specialist writing on behalf of a job candidate.
+Read the candidate's actual resume content below carefully. Extract specific technical skills, programming languages, automation frameworks, test tools, domain experience, and major project accomplishments.
 
-Do not include subject line placeholders in the body; only output the clean body of the email.
+Craft a highly compelling, professional 4-5 paragraph cold outreach email tailored to the recipient.
+The email body MUST be fully personalized using the candidate's real resume details.
 
-My Profile & Resume Details (Candidate):
-- Name: ${client.name}
+Candidate Details:
+- Full Name: ${client.name}
 - Email: ${client.email}
-- Enrollment ID: ${client.enrollment_id || 'N/A'}
-- Mobile: ${client.mobile || 'N/A'}
----
-Resume Content:
-${client.resume_text || 'No resume details provided. Please generate a general professional introduction.'}
----
+- Target Job Roles: ${client.target_job_roles || 'Software Engineer'}
+- Resume Text:
+${client.resume_text || 'Experienced software professional.'}
 
-Recipient Details (Hiring Contact):
-- Name: ${contact.name || 'Hiring Manager'}
-- Email: ${contact.email}
-- Company: ${contact.company || 'your organization'}
-- Job Role: ${contact.role || (client.target_job_roles ? client.target_job_roles.split(',')[0] : 'Software Engineer')}
-- Industry: ${contact.industry || 'relevant sector'}
-- Country: ${contact.country || 'N/A'}
+Recipient Details:
+- Contact Name: ${contact.name || 'Hiring Manager'}
+- Target Company: ${contact.company || 'your organization'}
+- Target Role: ${contact.role || (client.target_job_roles ? client.target_job_roles.split(',')[0] : 'Software Engineer')}
+- Industry: ${contact.industry || 'Technology'}
 
-Generate the email now. Return a JSON structure exactly like this:
+Return a JSON object with EXACTLY this structure:
 {
-  "subject": "personalized subject line",
-  "body": "Dear ${contact.name || 'Hiring Manager'},\\n\\n[professional cover letter style body of the email]\\n\\nBest regards,\\n${client.name}"
+  "subject": "Experienced ${contact.role || 'Software Engineer'} | Application at ${contact.company || 'your organization'}",
+  "body": "Dear ${contact.name || 'Hiring Manager'},\\n\\nI hope this email finds you well.\\n\\nI am writing to express my strong interest in potential ${contact.role || 'software engineering'} opportunities at ${contact.company || 'your organization'}... [4-5 detailed paragraphs referencing candidate resume skills, frameworks, achievements, and value proposal]\\n\\nBest regards,\\n${client.name}"
 }
-Ensure the output is valid JSON. If you use code fences, use \`\`\`json.
+Ensure output is valid JSON.
 `;
 
   const result = await model.generateContent(prompt);
