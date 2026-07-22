@@ -68,7 +68,12 @@ app.post('/api/settings', async (req, res) => {
 // ----------------- CLIENTS (CANDIDATES) API -----------------
 app.get('/api/clients', async (req, res) => {
   try {
-    const rows = await dbAll('SELECT * FROM clients ORDER BY id DESC');
+    const rows = await dbAll(`
+      SELECT clients.*, 
+             (SELECT COUNT(*) FROM logs WHERE logs.client_id = clients.id AND logs.status = 'Sent') as sent_count
+      FROM clients 
+      ORDER BY id DESC
+    `);
     res.json(rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -263,7 +268,7 @@ app.post('/api/contacts/bulk-file', upload.single('file'), async (req, res) => {
     let csvText = '';
     const filename = (req.file.originalname || '').toLowerCase();
 
-    if (filename.endsWith('.xlsx') || filename.endsWith('.xls')) {
+    if (filename.endsWith('.xlsx') || filename.endsWith('.xls') || filename.endsWith('.csv')) {
       const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
       const firstSheetName = workbook.SheetNames[0];
       if (firstSheetName) {
@@ -351,16 +356,16 @@ function parseCSV(text) {
     let inQuotes = false;
     for (let i = 0; i < line.length; i++) {
       const char = line[i];
-      if (char === '"' || char === "'") {
+      if (char === '"') {
         inQuotes = !inQuotes;
       } else if (char === separator && !inQuotes) {
-        result.push(current.trim().replace(/^["']|["']$/g, '').trim());
+        result.push(current.trim().replace(/^"|"$/g, '').trim());
         current = '';
       } else {
         current += char;
       }
     }
-    result.push(current.trim().replace(/^["']|["']$/g, '').trim());
+    result.push(current.trim().replace(/^"|"$/g, '').trim());
     return result;
   };
 
@@ -377,12 +382,15 @@ function parseCSV(text) {
 
   if (hasHeader) {
     const headers = firstLineValues.map(h => h.toLowerCase().replace(/[^a-z0-9]/g, ''));
-    nameIndex = headers.findIndex(h => h === 'name' || h.includes('name') || h === 'contact' || h.includes('person') || h.includes('hr'));
+    nameIndex = headers.findIndex(h => 
+      (h.includes('name') || h === 'contact' || h.includes('person') || h.includes('hr') || h.includes('hiring') || h.includes('manager')) &&
+      !h.includes('company') && !h.includes('firm') && !h.includes('employer') && !h.includes('brand')
+    );
     emailIndex = headers.findIndex(h => h === 'email' || h.includes('email') || h.includes('mail'));
-    companyIndex = headers.findIndex(h => h === 'company' || h.includes('company') || h === 'firm' || h === 'organization' || h === 'employer' || h.includes('corp'));
-    roleIndex = headers.findIndex(h => h === 'role' || h.includes('role') || h === 'title' || h.includes('title') || h === 'designation' || h === 'job' || h.includes('position'));
-    industryIndex = headers.findIndex(h => h === 'industry' || h.includes('industry') || h === 'sector' || h.includes('domain'));
-    countryIndex = headers.findIndex(h => h === 'country' || h.includes('country') || h === 'location' || h === 'nation' || h.includes('state'));
+    companyIndex = headers.findIndex(h => h === 'company' || h.includes('company') || h === 'firm' || h === 'organization' || h === 'employer' || h.includes('corp') || h.includes('brand'));
+    roleIndex = headers.findIndex(h => h === 'role' || h.includes('role') || h === 'title' || h.includes('title') || h === 'designation' || h === 'job' || h.includes('position') || h.includes('occupation'));
+    industryIndex = headers.findIndex(h => h.includes('industry') || h.includes('sector') || h.includes('domain') || h.includes('field') || h.includes('tech') || h.includes('consultant'));
+    countryIndex = headers.findIndex(h => h === 'country' || h.includes('country') || h === 'location' || h.includes('nation') || h.includes('state') || h.includes('city') || h.includes('address'));
   }
 
   const contacts = [];
@@ -550,6 +558,11 @@ app.post('/api/send-email', async (req, res) => {
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [client.id, client.name, client.email, contact.name, contact.email, contact.company, customSubject || '', customBody || '', 'Failed', error.message]
         );
+        const isRecipientError = (error.rejected && error.rejected.length > 0) || /reject|550|553|mailbox|recipient|address|invalid|not found/i.test(error.message);
+        if (isRecipientError) {
+          await dbRun('DELETE FROM contacts WHERE id = ?', [contact.id]);
+          console.log(`Automatically deleted rejected manual HR contact: ${contact.email}`);
+        }
       }
     } catch (dbErr) {
       console.error('Failed to log email send failure:', dbErr);
@@ -915,10 +928,9 @@ async function runDailyCampaign() {
       return true;
     });
 
-    // Query DB logs to exclude already emailed contacts by this client
+    // Query DB logs to exclude already emailed contacts globally (across all candidates)
     const alreadySentLogs = await dbAll(
-      "SELECT contact_email FROM logs WHERE client_id = ? AND status = 'Sent'", 
-      [client.id]
+      "SELECT contact_email FROM logs WHERE status = 'Sent'"
     );
     const sentEmailsList = alreadySentLogs.map(l => l.contact_email);
     
@@ -948,6 +960,11 @@ async function runDailyCampaign() {
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [client.id, client.name, client.email, contact.name, contact.email, contact.company, '', '', 'Failed', error.message]
         );
+        const isRecipientError = (error.rejected && error.rejected.length > 0) || /reject|550|553|mailbox|recipient|address|invalid|not found/i.test(error.message);
+        if (isRecipientError) {
+          await dbRun('DELETE FROM contacts WHERE id = ?', [contact.id]);
+          console.log(`Automatically deleted rejected campaign HR contact: ${contact.email}`);
+        }
       }
     }
   }

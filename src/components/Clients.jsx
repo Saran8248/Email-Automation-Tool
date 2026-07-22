@@ -70,6 +70,12 @@ export default function Clients({ setNotification }) {
     fetchCountries();
   }, []);
 
+  useEffect(() => {
+    if (isOpen) {
+      fetchCountries();
+    }
+  }, [isOpen]);
+
   const fetchCountries = async () => {
     try {
       const data = await safeFetchJson('/api/countries');
@@ -474,6 +480,7 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
               <th>Client Name</th>
               <th>Enrollment ID</th>
               <th>Sender Email (Gmail)</th>
+              <th>Sent Mails</th>
               <th>Targets</th>
               <th>Mobile</th>
               <th>Status</th>
@@ -483,7 +490,7 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
           <tbody>
             {clients.length === 0 ? (
               <tr>
-                <td colSpan="7" style={{ textAlign: 'center', padding: '3rem 0', color: 'var(--text-muted)' }}>
+                <td colSpan="8" style={{ textAlign: 'center', padding: '3rem 0', color: 'var(--text-muted)' }}>
                   No candidates added yet. Add a client candidate profile to run personalized outreach.
                 </td>
               </tr>
@@ -498,6 +505,11 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
                     <td style={{ fontWeight: 600 }}>{c.name}</td>
                     <td>{c.enrollment_id || '—'}</td>
                     <td>{c.email}</td>
+                    <td>
+                      <span className="badge badge-success" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', fontWeight: 'bold', textTransform: 'none' }}>
+                        {c.sent_count || 0} Sent
+                      </span>
+                    </td>
                     <td>
                       {parsedCountries.length > 0 ? (
                         <span className="badge badge-warning" style={{ background: 'rgba(124, 58, 237, 0.1)', color: 'var(--primary-light)', textTransform: 'none' }}>
@@ -787,6 +799,42 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
                       </label>
                     </div>
                   ))}
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
+                  <input 
+                    type="text" 
+                    placeholder="Add custom country (e.g. Canada, BTM)" 
+                    className="form-input" 
+                    id="newCountryInput"
+                    style={{ padding: '0.35rem 0.75rem', fontSize: '0.85rem', flex: 1 }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const val = e.target.value.trim();
+                        if (val && !countriesList.includes(val)) {
+                          setCountriesList([...countriesList, val]);
+                          setSelectedCountries([...selectedCountries, val]);
+                          e.target.value = '';
+                        }
+                      }
+                    }}
+                  />
+                  <button 
+                    type="button" 
+                    className="btn" 
+                    style={{ padding: '0.35rem 1rem', fontSize: '0.85rem', borderColor: '#38bdf8', color: '#38bdf8' }}
+                    onClick={() => {
+                      const input = document.getElementById('newCountryInput');
+                      const val = input.value.trim();
+                      if (val && !countriesList.includes(val)) {
+                        setCountriesList([...countriesList, val]);
+                        setSelectedCountries([...selectedCountries, val]);
+                        input.value = '';
+                      }
+                    }}
+                  >
+                    + Add
+                  </button>
                 </div>
               </div>
 

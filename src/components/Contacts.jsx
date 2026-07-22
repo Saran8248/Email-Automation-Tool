@@ -326,7 +326,7 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
               <th>Contact Name</th>
               <th>Email</th>
               <th>Company</th>
-              <th>Target Role</th>
+              <th>Industry</th>
               <th>Country</th>
               <th>Status</th>
               <th style={{ textAlign: 'right' }}>Actions</th>
@@ -346,9 +346,9 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
                   <td>{c.email}</td>
                   <td>{c.company || '—'}</td>
                   <td>
-                    {c.role ? (
+                    {c.industry ? (
                       <span className="badge badge-warning" style={{ background: 'rgba(124,58,237,0.1)', color: 'var(--primary-light)', textTransform: 'none' }}>
-                        {c.role}
+                        {c.industry}
                       </span>
                     ) : '—'}
                   </td>
