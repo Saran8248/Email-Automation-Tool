@@ -873,11 +873,44 @@ async function runDailyCampaign() {
 
     // Filter contacts matching targets and not emailed by this client yet
     const matchingContacts = allContacts.filter(contact => {
+      // Robust Country Match
       if (targetCountries.length > 0 && contact.country) {
-        if (!targetCountries.includes(contact.country)) return false;
+        const contactCountryLower = contact.country.trim().toLowerCase();
+        let countryMatched = false;
+        for (const tc of targetCountries) {
+          const tcLower = tc.trim().toLowerCase();
+          if (contactCountryLower === tcLower || contactCountryLower.includes(tcLower) || tcLower.includes(contactCountryLower)) {
+            countryMatched = true;
+            break;
+          }
+        }
+        if (!countryMatched) return false;
       }
+
+      // Robust Fuzzy Industry Match
       if (targetIndustries.length > 0 && contact.industry) {
-        if (!targetIndustries.includes(contact.industry)) return false;
+        const contactIndLower = contact.industry.trim().toLowerCase();
+        let industryMatched = false;
+        for (const ti of targetIndustries) {
+          const tiLower = ti.trim().toLowerCase();
+          
+          if (contactIndLower === tiLower) {
+            industryMatched = true;
+            break;
+          }
+          if (tiLower.includes('&')) {
+            const parts = tiLower.split('&').map(p => p.trim());
+            if (parts.some(p => contactIndLower.includes(p) || p.includes(contactIndLower))) {
+              industryMatched = true;
+              break;
+            }
+          }
+          if (contactIndLower.includes(tiLower) || tiLower.includes(contactIndLower)) {
+            industryMatched = true;
+            break;
+          }
+        }
+        if (!industryMatched) return false;
       }
       return true;
     });
