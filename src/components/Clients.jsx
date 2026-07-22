@@ -144,13 +144,17 @@ export default function Clients({ setNotification }) {
 
   const handleGenerateTemplateForModal = async (textToUse, clientObj = null) => {
     const currentClient = clientObj || templateClient;
-    if (!textToUse && !currentClient) return;
+    const resumeToUse = textToUse || (currentClient ? currentClient.resume_text : '') || resumeText;
+    if (!resumeToUse || resumeToUse.trim().length === 0) {
+      setNotification({ message: 'No resume text available to generate template.', type: 'error' });
+      return;
+    }
     setGeneratingTemplate(true);
     try {
       const data = await safeFetchJson('/api/generate-template', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: currentClient ? currentClient.name : name, resume_text: textToUse || resumeText })
+        body: JSON.stringify({ name: currentClient ? currentClient.name : name, resume_text: resumeToUse })
       });
       if (data.success && data.template) {
         if (data.template.resume_analysis) setResumeAnalysis(data.template.resume_analysis);
@@ -211,6 +215,24 @@ export default function Clients({ setNotification }) {
       }
     } catch (err) {
       setNotification({ message: err.message, type: 'error' });
+    }
+  };
+
+  const handleSelectAllIndustries = (e) => {
+    e.preventDefault();
+    if (selectedIndustries.length === INDUSTRIES_LIST.length) {
+      setSelectedIndustries([]);
+    } else {
+      setSelectedIndustries([...INDUSTRIES_LIST]);
+    }
+  };
+
+  const handleSelectAllCountries = (e) => {
+    e.preventDefault();
+    if (selectedCountries.length === countriesList.length) {
+      setSelectedCountries([]);
+    } else {
+      setSelectedCountries([...countriesList]);
     }
   };
 
@@ -719,7 +741,12 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
               </div>
 
               <div className="form-group" style={{ marginTop: '1rem' }}>
-                <label style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>TARGET INDUSTRIES</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: '700' }}>TARGET INDUSTRIES</label>
+                  <button type="button" className="btn btn-sm" onClick={handleSelectAllIndustries} style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', borderColor: '#38bdf8', color: '#38bdf8' }}>
+                    {selectedIndustries.length === INDUSTRIES_LIST.length ? 'Deselect All' : 'Select All'}
+                  </button>
+                </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--border-color)', padding: '0.75rem', borderRadius: '8px', marginTop: '0.35rem' }}>
                   {INDUSTRIES_LIST.map(ind => (
                     <div key={ind} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -739,7 +766,12 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
               </div>
 
               <div className="form-group" style={{ marginTop: '1rem' }}>
-                <label style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>TARGET COUNTRIES</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: '700' }}>TARGET COUNTRIES</label>
+                  <button type="button" className="btn btn-sm" onClick={handleSelectAllCountries} style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', borderColor: '#38bdf8', color: '#38bdf8' }}>
+                    {selectedCountries.length === countriesList.length ? 'Deselect All' : 'Select All'}
+                  </button>
+                </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginTop: '0.35rem' }}>
                   {countriesList.map(c => (
                     <div key={c} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', border: '1px solid var(--border-color)', padding: '0.5rem 0.75rem', borderRadius: '8px', backgroundColor: selectedCountries.includes(c) ? 'var(--primary-glow)' : 'transparent' }}>

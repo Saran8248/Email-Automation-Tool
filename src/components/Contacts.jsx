@@ -62,6 +62,11 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
     }
   };
 
+  // Filter states
+  const [filterCountry, setFilterCountry] = useState('All');
+  const [filterIndustry, setFilterIndustry] = useState('All');
+  const [filterStatus, setFilterStatus] = useState('All');
+
   // Form states
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -267,10 +272,17 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
     }
   };
 
+  const filteredContacts = contacts.filter(c => {
+    if (filterCountry !== 'All' && c.country !== filterCountry) return false;
+    if (filterIndustry !== 'All' && c.industry !== filterIndustry) return false;
+    if (filterStatus !== 'All' && c.status !== filterStatus) return false;
+    return true;
+  });
+
   return (
     <div>
       <div className="card-header" style={{ marginBottom: '1.5rem' }}>
-        <h3 className="card-title">{contacts.length} Contacts</h3>
+        <h3 className="card-title">{filteredContacts.length} of {contacts.length} Contacts</h3>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
           <button className="btn" onClick={() => { resetForm(); setIsAddOpen(true); }}>
             + Add Contact
@@ -278,6 +290,32 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
           <button className="btn btn-primary" onClick={() => setIsBulkOpen(true)}>
             Bulk Upload CSV
           </button>
+        </div>
+      </div>
+
+      {/* Filter Dropdowns at Top of Contacts Page */}
+      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap', backgroundColor: '#090f19', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', minWidth: '160px' }}>
+          <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Filter by Country</label>
+          <select className="form-select" value={filterCountry} onChange={e => setFilterCountry(e.target.value)} style={{ padding: '0.45rem', backgroundColor: '#050814', color: '#ffffff', border: '1px solid var(--border-color)' }}>
+            <option value="All">All Countries</option>
+            {countriesList.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', minWidth: '200px' }}>
+          <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Filter by Industry</label>
+          <select className="form-select" value={filterIndustry} onChange={e => setFilterIndustry(e.target.value)} style={{ padding: '0.45rem', backgroundColor: '#050814', color: '#ffffff', border: '1px solid var(--border-color)' }}>
+            <option value="All">All Industries</option>
+            {INDUSTRIES_LIST.map(ind => <option key={ind} value={ind}>{ind}</option>)}
+          </select>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', minWidth: '130px' }}>
+          <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Filter by Status</label>
+          <select className="form-select" value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ padding: '0.45rem', backgroundColor: '#050814', color: '#ffffff', border: '1px solid var(--border-color)' }}>
+            <option value="All">All Statuses</option>
+            <option value="Active">Active</option>
+            <option value="Paused">Paused</option>
+          </select>
         </div>
       </div>
 
@@ -295,14 +333,14 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
             </tr>
           </thead>
           <tbody>
-            {contacts.length === 0 ? (
+            {filteredContacts.length === 0 ? (
               <tr>
                 <td colSpan="7" style={{ textAlign: 'center', padding: '3rem 0', color: 'var(--text-muted)' }}>
-                  No contacts found. Please add or import contacts to begin outreach.
+                  No contacts match your filter criteria.
                 </td>
               </tr>
             ) : (
-              contacts.map((c) => (
+              filteredContacts.map((c) => (
                 <tr key={c.id}>
                   <td style={{ fontWeight: 600 }}>{c.name}</td>
                   <td>{c.email}</td>
