@@ -63,9 +63,23 @@ export default function Clients({ setNotification }) {
   const [isDocPreviewResume, setIsDocPreviewResume] = useState(false);
   const [isDocPreviewCoverLetter, setIsDocPreviewCoverLetter] = useState(false);
 
+  const [countriesList, setCountriesList] = useState(['Germany', 'UAE', 'Netherlands', 'Australia']);
+
   useEffect(() => {
     fetchClients();
+    fetchCountries();
   }, []);
+
+  const fetchCountries = async () => {
+    try {
+      const data = await safeFetchJson('/api/countries');
+      if (Array.isArray(data)) {
+        setCountriesList(data);
+      }
+    } catch (err) {
+      console.error('Failed to load countries:', err);
+    }
+  };
 
   const fetchClients = async () => {
     try {
@@ -727,7 +741,7 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
               <div className="form-group" style={{ marginTop: '1rem' }}>
                 <label style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>TARGET COUNTRIES</label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginTop: '0.35rem' }}>
-                  {COUNTRIES_LIST.map(c => (
+                  {countriesList.map(c => (
                     <div key={c} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', border: '1px solid var(--border-color)', padding: '0.5rem 0.75rem', borderRadius: '8px', backgroundColor: selectedCountries.includes(c) ? 'var(--primary-glow)' : 'transparent' }}>
                       <input 
                         type="checkbox" 

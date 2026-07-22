@@ -114,6 +114,19 @@ app.delete('/api/clients/:id', async (req, res) => {
   }
 });
 
+app.get('/api/countries', async (req, res) => {
+  try {
+    const rows = await dbAll("SELECT DISTINCT country FROM contacts WHERE country IS NOT NULL AND country != ''");
+    const dbCountries = rows.map(r => r.country.trim());
+    const defaultList = ['Germany', 'UAE', 'Netherlands', 'Australia'];
+    const merged = Array.from(new Set([...defaultList, ...dbCountries])).filter(Boolean);
+    merged.sort();
+    res.json(merged);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // PDF Parsing Route
 app.post('/api/parse-pdf', upload.single('file'), async (req, res) => {
   try {
@@ -585,10 +598,24 @@ async function generateEmailContent(client, contact, settings) {
       cleanRole = client.target_job_roles.split(',')[0].trim();
     }
 
-    // Determine cleanest HR recipient name
+    // Determine cleanest HR recipient name with generic name detection
     let cleanHrName = 'Hiring Manager';
-    if (contact.name && contact.name.trim().length > 0 && !contact.name.includes('{') && contact.name !== 'HR Contact') {
-      cleanHrName = contact.name.trim();
+    if (contact.name && contact.name.trim().length > 0 && !contact.name.includes('{') && contact.name.toLowerCase() !== 'hr contact') {
+      const nameLower = contact.name.trim().toLowerCase();
+      const genericTerms = ['company', 'agency', 'support', 'services', 'store', 'supplier', 'service', 'manufacturer', 'office', 'contact', 'group', 'corporation', 'ltd', 'llc', 'inc', 'firm', 'recruitment', 'team', 'jobs', 'careers', 'manager', 'specialist', 'recruiter'];
+      let isGeneric = false;
+      for (const term of genericTerms) {
+        if (nameLower.includes(term)) {
+          isGeneric = true;
+          break;
+        }
+      }
+      if (contact.company && nameLower === contact.company.trim().toLowerCase()) {
+        isGeneric = true;
+      }
+      if (!isGeneric) {
+        cleanHrName = contact.name.trim();
+      }
     }
 
     // Determine cleanest company name
@@ -623,36 +650,29 @@ async function generateEmailContent(client, contact, settings) {
     return result;
   };
 
-  if (client.email_template) {
+  // If Gemini is active, let's call Gemini to generate a COMPLETELY UNIQUE, custom cover letter variant
+  // to guarantee different layouts for different contacts!
+  if (settings.gemini_api_key) {
     try {
-      const template = JSON.parse(client.email_template);
-      if (template.subject && template.body) {
-        return {
-          subject: replacePlaceholders(template.subject),
-          body: replacePlaceholders(template.body)
-        };
+      const genAI = new GoogleGenerativeAI(settings.gemini_api_key);
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+
+      let baseTemplateBody = "";
+      if (client.email_template) {
+        try {
+          const t = JSON.parse(client.email_template);
+          baseTemplateBody = t.body || "";
+        } catch(e) {}
       }
-    } catch (e) {
-      console.error('Failed to parse or use candidate email template:', e);
-    }
-  }
 
-  if (!settings.gemini_api_key) {
-    return {
-      subject: replacePlaceholders(`Experienced {role} | {role} Application at {company}`),
-      body: replacePlaceholders(`Dear {hr_name},\n\nI hope this email finds you well.\n\nI am writing to express my strong interest in potential {role} opportunities at {company}. With extensive technical experience in {industry} and a proven track record of engineering scalable solutions, I have consistently driven quality releases, reduced overhead, and accelerated project delivery across complex digital platforms.\n\nIn my recent projects, I have led the design and implementation of core software frameworks, automated regression test suites, and integrated continuous deployment pipelines. My expertise spans technical architecture, API development, test automation, and cross-functional Agile delivery.\n\nI am particularly impressed by {company}'s ongoing innovation and global engineering impact. I would welcome the opportunity to discuss how my technical expertise, domain knowledge, and passion for engineering excellence can add immediate value to your team and upcoming projects.\n\nThank you for your time and consideration. I look forward to connecting with you soon.\n\nBest regards,\n{client_name}`)
-    };
-  }
-
-  const genAI = new GoogleGenerativeAI(settings.gemini_api_key);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
-  const prompt = `
+      const prompt = `
 You are a career cold outreach specialist writing on behalf of a job candidate.
 Read the candidate's actual resume content below carefully. Extract specific technical skills, programming languages, automation frameworks, test tools, domain experience, and major project accomplishments.
 
 Craft a highly compelling, professional 4-5 paragraph cold outreach email tailored to the recipient.
 The email body MUST be fully personalized using the candidate's real resume details.
+
+CRITICAL: Generate a completely unique email format, opening sentence, and value proposition layout. Do NOT repeat the exact same structure for different recipients. Vary the tone, structure, and highlight different achievements from the resume to keep it highly personalized and varied.
 
 Candidate Details:
 - Full Name: ${client.name}
@@ -667,6 +687,9 @@ Recipient Details:
 - Target Role: ${contact.role || (client.target_job_roles ? client.target_job_roles.split(',')[0] : 'Software Engineer')}
 - Industry: ${contact.industry || 'Technology'}
 
+Reference Template Style (If any, use as a general guide/tone reference, but vary it significantly):
+${baseTemplateBody}
+
 Return a JSON object with EXACTLY this structure:
 {
   "subject": "Experienced ${contact.role || 'Software Engineer'} | Application at ${contact.company || 'your organization'}",
@@ -675,26 +698,44 @@ Return a JSON object with EXACTLY this structure:
 Ensure output is valid JSON.
 `;
 
-  const result = await model.generateContent(prompt);
-  let text = result.response.text().trim();
-  
-  if (text.startsWith('```json')) {
-    text = text.substring(7, text.lastIndexOf('```')).trim();
-  } else if (text.startsWith('```')) {
-    text = text.substring(3, text.lastIndexOf('```')).trim();
+      const result = await model.generateContent(prompt);
+      let text = result.response.text().trim();
+      
+      if (text.startsWith('```json')) {
+        text = text.substring(7, text.lastIndexOf('```')).trim();
+      } else if (text.startsWith('```')) {
+        text = text.substring(3, text.lastIndexOf('```')).trim();
+      }
+
+      const parsed = JSON.parse(text);
+      return {
+        subject: replacePlaceholders(parsed.subject),
+        body: replacePlaceholders(parsed.body)
+      };
+    } catch (geminiErr) {
+      console.error("Gemini personalization failed, falling back to rotated templates:", geminiErr);
+    }
   }
 
-  try {
-    const parsed = JSON.parse(text);
-    return {
-      subject: replacePlaceholders(parsed.subject),
-      body: replacePlaceholders(parsed.body)
-    };
-  } catch (e) {
-    console.error('Failed to parse Gemini response JSON. Text:', text);
-    let subject = `Application for ${contact.role || 'Software Role'} - ${client.name}`;
-    return { subject: replacePlaceholders(subject), body: replacePlaceholders(text) };
-  }
+  // Fallbacks: 3 distinct premium layout styles to rotate through to ensure varied layouts!
+  const fallbacks = [
+    // Format 1: Standard Professional
+    `Dear {hr_name},\n\nI hope this email finds you well.\n\nI am writing to express my strong interest in potential {role} opportunities at {company}. With extensive technical experience in {industry} and a proven track record of engineering scalable solutions, I have consistently driven quality releases, reduced overhead, and accelerated project delivery across complex digital platforms.\n\nIn my recent projects, I have led the design and implementation of core software frameworks, automated regression test suites, and integrated continuous deployment pipelines. My expertise spans technical architecture, API development, test automation, and cross-functional Agile delivery.\n\nI am particularly impressed by {company}'s ongoing innovation and global engineering impact. I would welcome the opportunity to discuss how my technical expertise, domain knowledge, and passion for engineering excellence can add immediate value to your team and upcoming projects.\n\nThank you for your time and consideration. I look forward to connecting with you soon.\n\nBest regards,\n{client_name}`,
+    
+    // Format 2: Results & Achievements-focused
+    `Dear {hr_name},\n\nI trust you are having a productive week.\n\nI am reaching out to discuss potential software development and {role} roles at {company}. As a software professional specializing in {industry}, I specialize in building robust systems, designing automated pipelines, and driving product quality.\n\nOver the course of my engineering projects, I have developed comprehensive test suites, optimized execution times, and deployed solutions that cut down regression testing overhead by over 40%. I thrive on solving complex technical challenges and collaborating with agile engineering teams to hit milestones.\n\nSiemens and {company} have a stellar reputation for engineering excellence, which makes this opportunity highly exciting to me. I would love to explore how my hands-on experience can help your team streamline its release readiness and deliver superior quality features.\n\nMy resume is attached for your review. I look forward to the possibility of a brief conversation.\n\nSincerely,\n{client_name}`,
+
+    // Format 3: Conversational & Value-focused
+    `Dear {hr_name},\n\nI hope you are doing well. I have been following {company}'s recent engineering initiatives and wanted to get in touch regarding potential {role} positions on your team.\n\nI bring solid hands-on experience in Technology & Consulting, with a deep focus on designing modular test frameworks, automating REST APIs, and maintaining robust CI/CD integration. I enjoy helping software teams reduce manual testing bottlenecks and achieve continuous deployment goals.\n\nI believe my background in automation framework architecture matches your team's standard of excellence. I am eager to contribute my skills to {company}'s upcoming releases and keep software quality high.\n\nThank you for considering my application. I would welcome the chance to schedule a call to introduce myself further.\n\nWarm regards,\n{client_name}`
+  ];
+
+  const index = (contact.id || 0) % fallbacks.length;
+  const selectedTemplate = fallbacks[index];
+
+  return {
+    subject: replacePlaceholders(`Experienced {role} | {role} Application at {company}`),
+    body: replacePlaceholders(selectedTemplate)
+  };
 }
 
 async function generatePdfBuffer(candidateName, resumeText) {
@@ -752,21 +793,10 @@ async function sendRawEmail(to, subject, body, client) {
 
   const htmlBody = body.replace(/\n/g, '<br>');
 
-  // Build HTML email with clean resume appendix at the end
+  // Build clean HTML email body without raw resume text clutter
   const fullHtml = `
     <div style="font-family: Arial, sans-serif; font-size: 14px; color: #333333; line-height: 1.6;">
       ${htmlBody}
-      
-      <div style="margin-top: 35px; padding-top: 20px; border-top: 2px solid #e2e8f0;">
-        <div style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-left: 4px solid #0284c7; padding: 18px; border-radius: 8px; font-size: 13px; color: #334155;">
-          <div style="font-weight: bold; color: #0284c7; font-size: 14px; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
-            📄 RESUME &amp; PROFESSIONAL SUMMARY &mdash; ${client.name}
-          </div>
-          <div style="font-family: 'Courier New', Courier, monospace; font-size: 12px; white-space: pre-wrap; color: #1e293b; background: #ffffff; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0; max-height: 400px; overflow-y: auto;">
-${client.resume_text || 'Professional summary details provided upon request.'}
-          </div>
-        </div>
-      </div>
     </div>
   `;
 

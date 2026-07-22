@@ -45,6 +45,22 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
   const [isBulkOpen, setIsBulkOpen] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [editingContact, setEditingContact] = useState(null);
+  const [countriesList, setCountriesList] = useState(['Germany', 'UAE', 'Netherlands', 'Australia']);
+
+  React.useEffect(() => {
+    fetchCountries();
+  }, [contacts]);
+
+  const fetchCountries = async () => {
+    try {
+      const data = await safeFetchJson('/api/countries');
+      if (Array.isArray(data)) {
+        setCountriesList(data);
+      }
+    } catch (err) {
+      console.error('Failed to load countries:', err);
+    }
+  };
 
   // Form states
   const [name, setName] = useState('');
@@ -372,7 +388,7 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
                   <label>Country</label>
                   <select className="form-select" value={country} onChange={e => setCountry(e.target.value)}>
                     <option value="">-- Select Country --</option>
-                    {COUNTRIES_LIST.map(c => (
+                    {countriesList.map(c => (
                       <option key={c} value={c}>{c}</option>
                     ))}
                   </select>
