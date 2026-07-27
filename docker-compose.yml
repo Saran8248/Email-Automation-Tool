@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  email-automation:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: email_automation_app
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./database.db:/app/database.db
+    restart: always
+    environment:
+      - PORT=5000
+      - NODE_ENV=production
