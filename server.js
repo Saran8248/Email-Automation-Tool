@@ -42,6 +42,12 @@ async function getSettingsMap() {
   return settings;
 }
 
+function isEmailValid(email) {
+  if (!email || typeof email !== 'string') return false;
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email.trim());
+}
+
 // ----------------- SETTINGS API -----------------
 app.get('/api/settings', async (req, res) => {
   try {
@@ -528,6 +534,12 @@ app.post('/api/send-email', async (req, res) => {
       return res.status(404).json({ error: 'Client or Contact not found' });
     }
 
+    if (!isEmailValid(contact.email)) {
+      await dbRun('DELETE FROM contacts WHERE id = ?', [contact.id]);
+      console.log(`Automatically deleted malformed/invalid email format contact: ${contact.email}`);
+      return res.status(400).json({ error: `Invalid email address format: ${contact.email}. Contact has been erased.` });
+    }
+
     const settings = await getSettingsMap();
     let subject = customSubject;
     let body = customBody;
@@ -558,7 +570,8 @@ app.post('/api/send-email', async (req, res) => {
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [client.id, client.name, client.email, contact.name, contact.email, contact.company, customSubject || '', customBody || '', 'Failed', error.message]
         );
-        const isRecipientError = (error.rejected && error.rejected.length > 0) || /reject|550|553|mailbox|recipient|address|invalid|not found/i.test(error.message);
+        const isRecipientError = (error.rejected && error.rejected.length > 0) || 
+          /reject|550|553|554|mailbox|recipient|address|invalid|not found|dns|getaddrinfo|route|unreachable/i.test(error.message);
         if (isRecipientError) {
           await dbRun('DELETE FROM contacts WHERE id = ?', [contact.id]);
           console.log(`Automatically deleted rejected manual HR contact: ${contact.email}`);
@@ -940,7 +953,13 @@ async function runDailyCampaign() {
 
     console.log(`Candidate ${client.name} has ${candidateTodoContacts.length} target contacts to email today.`);
 
-    for (const contact of candidateTodoContacts) {
+     for (const contact of candidateTodoContacts) {
+      if (!isEmailValid(contact.email)) {
+        await dbRun('DELETE FROM contacts WHERE id = ?', [contact.id]);
+        console.log(`Automatically deleted malformed/invalid email format contact in campaign: ${contact.email}`);
+        totalFailed++;
+        continue;
+      }
       try {
         const generated = await generateEmailContent(client, contact, settings);
         await sendRawEmail(contact.email, generated.subject, generated.body, client);
@@ -960,7 +979,8 @@ async function runDailyCampaign() {
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [client.id, client.name, client.email, contact.name, contact.email, contact.company, '', '', 'Failed', error.message]
         );
-        const isRecipientError = (error.rejected && error.rejected.length > 0) || /reject|550|553|mailbox|recipient|address|invalid|not found/i.test(error.message);
+        const isRecipientError = (error.rejected && error.rejected.length > 0) || 
+          /reject|550|553|554|mailbox|recipient|address|invalid|not found|dns|getaddrinfo|route|unreachable/i.test(error.message);
         if (isRecipientError) {
           await dbRun('DELETE FROM contacts WHERE id = ?', [contact.id]);
           console.log(`Automatically deleted rejected campaign HR contact: ${contact.email}`);
