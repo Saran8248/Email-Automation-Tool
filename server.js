@@ -294,9 +294,19 @@ app.post('/api/contacts/bulk-file', upload.single('file'), async (req, res) => {
     let failed = 0;
 
     for (const c of contacts) {
+      if (!isEmailValid(c.email)) {
+        failed++;
+        continue;
+      }
       try {
+        const existing = await dbGet('SELECT id FROM contacts WHERE LOWER(TRIM(email)) = LOWER(TRIM(?))', [c.email]);
+        if (existing) {
+          // Email already exists in database, skip it
+          continue;
+        }
+
         await dbRun(
-          'INSERT OR REPLACE INTO contacts (name, email, company, role, industry, country) VALUES (?, ?, ?, ?, ?, ?)',
+          'INSERT INTO contacts (name, email, company, role, industry, country) VALUES (?, ?, ?, ?, ?, ?)',
           [c.name, c.email, c.company, c.role, c.industry, c.country]
         );
         imported++;
@@ -320,9 +330,19 @@ app.post('/api/contacts/bulk-paste', async (req, res) => {
     let failed = 0;
 
     for (const c of contacts) {
+      if (!isEmailValid(c.email)) {
+        failed++;
+        continue;
+      }
       try {
+        const existing = await dbGet('SELECT id FROM contacts WHERE LOWER(TRIM(email)) = LOWER(TRIM(?))', [c.email]);
+        if (existing) {
+          // Email already exists in database, skip it
+          continue;
+        }
+
         await dbRun(
-          'INSERT OR REPLACE INTO contacts (name, email, company, role, industry, country) VALUES (?, ?, ?, ?, ?, ?)',
+          'INSERT INTO contacts (name, email, company, role, industry, country) VALUES (?, ?, ?, ?, ?, ?)',
           [c.name, c.email, c.company, c.role, c.industry, c.country]
         );
         imported++;
