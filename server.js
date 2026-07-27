@@ -559,6 +559,9 @@ app.post('/api/send-email', async (req, res) => {
       [client.id, client.name, client.email, contact.name, contact.email, contact.company, subject, body, 'Sent']
     );
 
+    // Mark contact as Emailed so they are never emailed again
+    await dbRun("UPDATE contacts SET status = 'Emailed' WHERE id = ?", [contact.id]);
+
     res.json({ success: true, message: 'Email sent successfully!' });
   } catch (error) {
     try {
@@ -969,6 +972,10 @@ async function runDailyCampaign() {
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [client.id, client.name, client.email, contact.name, contact.email, contact.company, generated.subject, generated.body, 'Sent']
         );
+        
+        // Mark contact as Emailed so they are never emailed again
+        await dbRun("UPDATE contacts SET status = 'Emailed' WHERE id = ?", [contact.id]);
+        
         totalSent++;
         await new Promise(r => setTimeout(r, 4000)); // Delay between sends
       } catch (error) {
