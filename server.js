@@ -1036,13 +1036,15 @@ async function syncScheduler() {
 
   if (isActive) {
     const cronPattern = `${minute} ${hour} * * *`;
-    console.log(`Setting up daily scheduler with pattern: "${cronPattern}"`);
+    console.log(`Setting up daily scheduler with pattern: "${cronPattern}" in Australia/Sydney timezone`);
     activeCronJob = cron.schedule(cronPattern, async () => {
       try {
         await runDailyCampaign();
       } catch (err) {
         console.error("Error in scheduled campaign run:", err);
       }
+    }, {
+      timezone: "Australia/Sydney"
     });
     activeCronJob.start();
   }
