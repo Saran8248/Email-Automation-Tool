@@ -1,18 +1,8 @@
 import React, { useState, useEffect } from 'react';
 
-const INDUSTRIES_LIST = [
-  'E-commerce & Retail',
-  'Manufacturing & Automotive',
-  'Logistics & Supply Chain',
-  'Healthcare & Life Sciences',
-  'Telecom',
-  'FMCG & Consumer Goods',
-  'Energy & Utilities',
-  'Construction, Infrastructure & Real Estate',
-  'Technology & Consulting'
-];
+const INDUSTRIES_LIST = ['Technology & Consulting'];
 
-const COUNTRIES_LIST = ['Germany', 'UAE', 'Netherlands', 'Australia'];
+
 
 async function safeFetchJson(url, options = {}) {
   const res = await fetch(url, options);
@@ -46,8 +36,9 @@ export default function Clients({ setNotification }) {
   const [mobile, setMobile] = useState('');
   const [dailyLimit, setDailyLimit] = useState(10);
   const [selectedIndustries, setSelectedIndustries] = useState([]);
-  const [selectedCountries, setSelectedCountries] = useState([]);
+  const [selectedCities, setSelectedCities] = useState([]);
   const [resumeText, setResumeText] = useState('');
+  const [resumeFilename, setResumeFilename] = useState('');
   const [emailTemplateSubject, setEmailTemplateSubject] = useState('');
   const [emailTemplateBody, setEmailTemplateBody] = useState('');
   const [generatingTemplate, setGeneratingTemplate] = useState(false);
@@ -63,27 +54,27 @@ export default function Clients({ setNotification }) {
   const [isDocPreviewResume, setIsDocPreviewResume] = useState(false);
   const [isDocPreviewCoverLetter, setIsDocPreviewCoverLetter] = useState(false);
 
-  const [countriesList, setCountriesList] = useState(['Germany', 'UAE', 'Netherlands', 'Australia']);
+  const [CitiesList, setCitiesList] = useState([]);
 
   useEffect(() => {
     fetchClients();
-    fetchCountries();
+    fetchCities();
   }, []);
 
   useEffect(() => {
     if (isOpen) {
-      fetchCountries();
+      fetchCities();
     }
   }, [isOpen]);
 
-  const fetchCountries = async () => {
+  const fetchCities = async () => {
     try {
       const data = await safeFetchJson('/api/countries');
       if (Array.isArray(data)) {
-        setCountriesList(data);
+        setCitiesList(data);
       }
     } catch (err) {
-      console.error('Failed to load countries:', err);
+      console.error('Failed to load Cities:', err);
     }
   };
 
@@ -135,7 +126,7 @@ export default function Clients({ setNotification }) {
       .replace(/{candidate_name}/g, client ? client.name : 'Candidate')
       .replace(/{job_roles}/g, jobRoles || 'Senior QA Automation Engineer')
       .replace(/{industry}/g, 'Technology & Consulting')
-      .replace(/{country}/g, 'Germany');
+      .replace(/{city}/g, 'Germany');
   };
 
   const handleDownloadTextFile = (filename, content) => {
@@ -233,12 +224,12 @@ export default function Clients({ setNotification }) {
     }
   };
 
-  const handleSelectAllCountries = (e) => {
+  const handleSelectAllCities = (e) => {
     e.preventDefault();
-    if (selectedCountries.length === countriesList.length) {
-      setSelectedCountries([]);
+    if (selectedCities.length === CitiesList.length) {
+      setSelectedCities([]);
     } else {
-      setSelectedCountries([...countriesList]);
+      setSelectedCities([...CitiesList]);
     }
   };
 
@@ -251,8 +242,9 @@ export default function Clients({ setNotification }) {
     setMobile('');
     setDailyLimit(10);
     setSelectedIndustries([]);
-    setSelectedCountries([]);
+    setSelectedCities([]);
     setResumeText('');
+    setResumeFilename('');
     setEmailTemplateSubject('');
     setEmailTemplateBody('');
     setStatus('Active');
@@ -269,6 +261,7 @@ export default function Clients({ setNotification }) {
     setDailyLimit(client.daily_limit || 10);
     setStatus(client.status || 'Active');
     setResumeText(client.resume_text || '');
+    setResumeFilename(client.resume_filename || '');
     
     try {
       const template = JSON.parse(client.email_template);
@@ -286,9 +279,9 @@ export default function Clients({ setNotification }) {
     }
     
     try {
-      setSelectedCountries(JSON.parse(client.target_countries) || []);
+      setSelectedCities(JSON.parse(client.target_countries) || []);
     } catch (e) {
-      setSelectedCountries([]);
+      setSelectedCities([]);
     }
     
     setIsOpen(true);
@@ -319,8 +312,9 @@ export default function Clients({ setNotification }) {
       enrollment_id: enrollmentId,
       mobile,
       target_industries: JSON.stringify(selectedIndustries),
-      target_countries: JSON.stringify(selectedCountries),
+      target_countries: JSON.stringify(selectedCities),
       resume_text: resumeText,
+      resume_filename: resumeFilename,
       email_template: JSON.stringify({ subject: emailTemplateSubject, body: emailTemplateBody }),
       status,
       resume_analysis: resumeAnalysis,
@@ -358,11 +352,11 @@ export default function Clients({ setNotification }) {
     }
   };
 
-  const handleCountryChange = (c) => {
-    if (selectedCountries.includes(c)) {
-      setSelectedCountries(selectedCountries.filter(item => item !== c));
+  const handleCityChange = (c) => {
+    if (selectedCities.includes(c)) {
+      setSelectedCities(selectedCities.filter(item => item !== c));
     } else {
-      setSelectedCountries([...selectedCountries, c]);
+      setSelectedCities([...selectedCities, c]);
     }
   };
 
@@ -429,6 +423,7 @@ export default function Clients({ setNotification }) {
           body: formData
         });
         if (data.text) {
+          if (data.savedFilename) setResumeFilename(data.savedFilename);
           setResumeText(data.text);
           setNotification({ message: 'Parsed PDF resume successfully!', type: 'success' });
           handleGenerateTemplate(data.text);
@@ -455,7 +450,7 @@ export default function Clients({ setNotification }) {
     setEnrollmentId('1922');
     setMobile('9543974755');
     setSelectedIndustries(['Technology & Consulting', 'E-commerce & Retail']);
-    setSelectedCountries(['Germany', 'Netherlands']);
+    setSelectedCities(['Germany', 'Netherlands']);
     setResumeText(`MUNISH KANNA S
 Full Stack Web Developer
 Skills: Java, Spring Boot, React, SQL, AWS, Git, REST APIs
@@ -496,9 +491,9 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
               </tr>
             ) : (
               clients.map((c) => {
-                let parsedCountries = [];
+                let parsedCities = [];
                 try {
-                  parsedCountries = JSON.parse(c.target_countries) || [];
+                  parsedCities = JSON.parse(c.target_countries) || [];
                 } catch(e){}
                 return (
                   <tr key={c.id}>
@@ -506,16 +501,16 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
                     <td>{c.enrollment_id || '—'}</td>
                     <td>{c.email}</td>
                     <td>
-                      <span className="badge badge-success" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', fontWeight: 'bold', textTransform: 'none' }}>
+                      <span className="badge badge-success">
                         {c.sent_count || 0} Sent
                       </span>
                     </td>
                     <td>
-                      {parsedCountries.length > 0 ? (
-                        <span className="badge badge-warning" style={{ background: 'rgba(124, 58, 237, 0.1)', color: 'var(--primary-light)', textTransform: 'none' }}>
-                          {parsedCountries.join(', ')}
+                      {parsedCities.length > 0 ? (
+                        <span className="badge badge-warning">
+                          {parsedCities.join(', ')}
                         </span>
-                      ) : 'All Countries'}
+                      ) : 'All Cities'}
                     </td>
                     <td>{c.mobile || '—'}</td>
                     <td>
@@ -525,7 +520,7 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
                     </td>
                     <td>
                       <div className="actions-row" style={{ justifyContent: 'flex-end' }}>
-                        <button className="icon-btn" title="Outreach Template" onClick={() => handleOpenTemplateModal(c)} style={{ borderColor: '#38bdf8', color: '#38bdf8' }}>
+                        <button className="icon-btn" title="Outreach Template" onClick={() => handleOpenTemplateModal(c)} style={{ borderColor: 'var(--primary)', color: 'var(--primary)' }}>
                           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" style={{ width: 16, height: 16 }}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
                           </svg>
@@ -553,19 +548,19 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
       {/* Candidate Outreach Template Modal (Matching Reference Images 2 & 3) */}
       {isTemplateOpen && templateClient && (
         <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '850px', width: '95%', backgroundColor: '#0b0f19', border: '1px solid #38bdf8', borderRadius: '16px', padding: '2rem' }}>
+          <div className="modal-content" style={{ maxWidth: '850px' }}>
             {/* Header */}
             <div className="modal-header" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem', marginBottom: '1.5rem' }}>
-              <h4 className="modal-title" style={{ fontSize: '1.4rem', fontWeight: '800', color: '#ffffff' }}>
+              <h4 className="modal-title" style={{ fontSize: '1.4rem' }}>
                 {templateClient.name} &mdash; outreach template
               </h4>
               <button className="icon-btn" onClick={() => setIsTemplateOpen(false)}>&times;</button>
             </div>
 
             {/* Resume Analysis Banner */}
-            <div style={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: '10px', padding: '1.25rem', marginBottom: '1.5rem' }}>
-              <p style={{ fontSize: '0.9rem', color: '#cbd5e1', lineHeight: '1.6' }}>
-                <strong style={{ color: '#38bdf8' }}>Resume analysis:</strong> {resumeAnalysis || `${templateClient.name} is a skilled professional with proven experience delivering technical solutions across enterprise domains.`}
+            <div style={{ backgroundColor: 'var(--bg-card-hover)', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '1.25rem', marginBottom: '1.5rem' }}>
+              <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                <strong style={{ color: 'var(--text-primary)' }}>Resume analysis:</strong> {resumeAnalysis || `${templateClient.name} is a skilled professional with proven experience delivering technical solutions across enterprise domains.`}
               </p>
             </div>
 
@@ -574,16 +569,16 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
               <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.75rem' }}>DOCUMENTS</label>
               <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
                 {/* Resume Card */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: '#1e293b', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '0.6rem 1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: 'var(--bg-card-hover)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '0.6rem 1rem' }}>
                   <span style={{ fontSize: '1.1rem' }}>📄</span>
-                  <span style={{ fontSize: '0.9rem', fontWeight: '700', color: '#ffffff' }}>Resume</span>
+                  <span style={{ fontSize: '0.9rem', fontWeight: '500', color: 'var(--text-primary)' }}>Resume</span>
                   <button type="button" className="btn btn-sm" style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }} onClick={() => setIsDocPreviewResume(true)}>👁️ Preview</button>
                   <button type="button" className="btn btn-sm" style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }} onClick={() => handleDownloadTextFile(`${templateClient.name}_Resume.txt`, templateClient.resume_text || resumeAnalysis)}>⬇️ Download</button>
                 </div>
                 {/* Cover Letter Card */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: '#1e293b', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '0.6rem 1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: 'var(--bg-card-hover)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '0.6rem 1rem' }}>
                   <span style={{ fontSize: '1.1rem' }}>📄</span>
-                  <span style={{ fontSize: '0.9rem', fontWeight: '700', color: '#ffffff' }}>Cover letter</span>
+                  <span style={{ fontSize: '0.9rem', fontWeight: '500', color: 'var(--text-primary)' }}>Cover letter</span>
                   <button type="button" className="btn btn-sm" style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }} onClick={() => setIsDocPreviewCoverLetter(true)}>👁️ Preview</button>
                   <button type="button" className="btn btn-sm" style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }} onClick={() => handleDownloadTextFile(`${templateClient.name}_CoverLetter.txt`, coverLetterText)}>⬇️ Download</button>
                 </div>
@@ -591,13 +586,13 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
             </div>
 
             {/* Outreach Log Status */}
-            <div style={{ backgroundColor: '#0f172a', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '0.85rem 1rem', marginBottom: '1.5rem', color: '#94a3b8', fontSize: '0.85rem' }}>
+            <div style={{ backgroundColor: 'var(--bg-card-hover)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '0.85rem 1rem', marginBottom: '1.5rem', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
               No emails sent yet for this client.
             </div>
 
             {/* Target Job Roles */}
             <div className="form-group" style={{ marginBottom: '1.25rem' }}>
-              <label style={{ color: '#cbd5e1', fontWeight: '700', fontSize: '0.85rem' }}>Target job roles (comma separated)</label>
+              <label style={{ fontWeight: '500', fontSize: '0.85rem' }}>Target job roles (comma separated)</label>
               <input 
                 type="text" 
                 className="form-input" 
@@ -610,7 +605,7 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
 
             {/* Email Subject */}
             <div className="form-group" style={{ marginBottom: '1.25rem' }}>
-              <label style={{ color: '#cbd5e1', fontWeight: '700', fontSize: '0.85rem' }}>Email subject</label>
+              <label style={{ fontWeight: '500', fontSize: '0.85rem' }}>Email subject</label>
               <input 
                 type="text" 
                 className="form-input" 
@@ -623,8 +618,8 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
 
             {/* Email Body */}
             <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-              <label style={{ color: '#cbd5e1', fontWeight: '700', fontSize: '0.85rem' }}>
-                Email body &mdash; placeholders: <code style={{ color: '#38bdf8' }}>{`{hr_name}`}</code> <code style={{ color: '#38bdf8' }}>{`{company}`}</code> <code style={{ color: '#38bdf8' }}>{`{role}`}</code> <code style={{ color: '#38bdf8' }}>{`{client_name}`}</code> <code style={{ color: '#38bdf8' }}>{`{job_roles}`}</code> <code style={{ color: '#38bdf8' }}>{`{industry}`}</code> <code style={{ color: '#38bdf8' }}>{`{country}`}</code>
+              <label style={{ fontWeight: '500', fontSize: '0.85rem' }}>
+                Email body &mdash; placeholders: <code style={{ color: 'var(--primary)' }}>{`{hr_name}`}</code> <code style={{ color: 'var(--primary)' }}>{`{company}`}</code> <code style={{ color: 'var(--primary)' }}>{`{role}`}</code> <code style={{ color: 'var(--primary)' }}>{`{client_name}`}</code> <code style={{ color: 'var(--primary)' }}>{`{job_roles}`}</code> <code style={{ color: 'var(--primary)' }}>{`{industry}`}</code> <code style={{ color: 'var(--primary)' }}>{`{city}`}</code>
               </label>
               <textarea 
                 className="form-textarea" 
@@ -638,8 +633,8 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
             {/* LIVE PREVIEW Section */}
             <div style={{ marginBottom: '2rem' }}>
               <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.5rem' }}>LIVE PREVIEW</label>
-              <div className="preview-box" style={{ maxHeight: '220px', overflowY: 'auto', backgroundColor: '#050814', border: '1px solid #1e293b', padding: '1rem', borderRadius: '8px', fontSize: '0.85rem', color: '#f8fafc', lineHeight: '1.6' }}>
-                <div style={{ fontWeight: 'bold', marginBottom: '0.5rem', color: '#38bdf8' }}>
+              <div className="preview-box" style={{ maxHeight: '220px', overflowY: 'auto', lineHeight: '1.6' }}>
+                <div style={{ fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--primary)' }}>
                   Subject: {computeSamplePreview(emailTemplateSubject, templateClient, targetJobRoles)}
                 </div>
                 {computeSamplePreview(emailTemplateBody, templateClient, targetJobRoles)}
@@ -675,8 +670,21 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
               <h4 className="modal-title">📄 {templateClient.name} — Resume Preview</h4>
               <button className="icon-btn" onClick={() => setIsDocPreviewResume(false)}>&times;</button>
             </div>
-            <div className="preview-box" style={{ maxHeight: '450px', overflowY: 'auto', whiteSpace: 'pre-wrap', marginTop: '1rem' }}>
-              {templateClient.resume_text || 'No resume details available.'}
+            <div className="preview-box" style={{ maxHeight: '600px', overflowY: 'auto', whiteSpace: 'pre-wrap', marginTop: '1rem', padding: templateClient.resume_filename ? '0' : '1rem' }}>
+              {templateClient.resume_filename ? (
+                <iframe 
+                  src={`/uploads/${templateClient.resume_filename}`} 
+                  style={{ width: '100%', height: '500px', border: 'none', borderRadius: '8px' }} 
+                  title="Resume PDF"
+                />
+              ) : (
+                <div style={{ padding: '1rem' }}>
+                  <div style={{ color: 'var(--text-warning)', marginBottom: '1rem', fontWeight: 'bold' }}>
+                    ⚠️ Note: Original PDF file not found. Displaying plain text extracted for AI personalization.
+                  </div>
+                  {templateClient.resume_text || 'No resume details available.'}
+                </div>
+              )}
             </div>
             <div className="modal-footer">
               <button type="button" className="btn btn-primary" onClick={() => setIsDocPreviewResume(false)}>Close</button>
@@ -755,7 +763,7 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
               <div className="form-group" style={{ marginTop: '1rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <label style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: '700' }}>TARGET INDUSTRIES</label>
-                  <button type="button" className="btn btn-sm" onClick={handleSelectAllIndustries} style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', borderColor: '#38bdf8', color: '#38bdf8' }}>
+                  <button type="button" className="btn btn-sm" onClick={handleSelectAllIndustries} style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', borderColor: 'var(--primary)', color: 'var(--primary)' }}>
                     {selectedIndustries.length === INDUSTRIES_LIST.length ? 'Deselect All' : 'Select All'}
                   </button>
                 </div>
@@ -779,22 +787,22 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
 
               <div className="form-group" style={{ marginTop: '1rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: '700' }}>TARGET COUNTRIES</label>
-                  <button type="button" className="btn btn-sm" onClick={handleSelectAllCountries} style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', borderColor: '#38bdf8', color: '#38bdf8' }}>
-                    {selectedCountries.length === countriesList.length ? 'Deselect All' : 'Select All'}
+                  <label style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: '700' }}>TARGET Cities</label>
+                  <button type="button" className="btn btn-sm" onClick={handleSelectAllCities} style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', borderColor: 'var(--primary)', color: 'var(--primary)' }}>
+                    {selectedCities.length === CitiesList.length ? 'Deselect All' : 'Select All'}
                   </button>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginTop: '0.35rem' }}>
-                  {countriesList.map(c => (
-                    <div key={c} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', border: '1px solid var(--border-color)', padding: '0.5rem 0.75rem', borderRadius: '8px', backgroundColor: selectedCountries.includes(c) ? 'var(--primary-glow)' : 'transparent' }}>
+                  {CitiesList.map(c => (
+                    <div key={c} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', border: '1px solid var(--border-color)', padding: '0.5rem 0.75rem', borderRadius: '8px', backgroundColor: selectedCities.includes(c) ? 'var(--primary-glow)' : 'transparent' }}>
                       <input 
                         type="checkbox" 
                         id={`c-${c}`}
-                        checked={selectedCountries.includes(c)}
-                        onChange={() => handleCountryChange(c)}
+                        checked={selectedCities.includes(c)}
+                        onChange={() => handleCityChange(c)}
                         style={{ cursor: 'pointer' }}
                       />
-                      <label htmlFor={`c-${c}`} style={{ fontSize: '0.85rem', cursor: 'pointer', fontWeight: '500', color: selectedCountries.includes(c) ? 'var(--primary-light)' : 'var(--text-secondary)' }}>
+                      <label htmlFor={`c-${c}`} style={{ fontSize: '0.85rem', cursor: 'pointer', fontWeight: '500', color: selectedCities.includes(c) ? 'var(--primary-light)' : 'var(--text-secondary)' }}>
                         {c}
                       </label>
                     </div>
@@ -803,17 +811,17 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
                 <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
                   <input 
                     type="text" 
-                    placeholder="Add custom country (e.g. Canada, BTM)" 
+                    placeholder="Add custom City (e.g. Canada, BTM)" 
                     className="form-input" 
-                    id="newCountryInput"
+                    id="newCityInput"
                     style={{ padding: '0.35rem 0.75rem', fontSize: '0.85rem', flex: 1 }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
                         const val = e.target.value.trim();
-                        if (val && !countriesList.includes(val)) {
-                          setCountriesList([...countriesList, val]);
-                          setSelectedCountries([...selectedCountries, val]);
+                        if (val && !CitiesList.includes(val)) {
+                          setCitiesList([...CitiesList, val]);
+                          setSelectedCities([...selectedCities, val]);
                           e.target.value = '';
                         }
                       }
@@ -822,13 +830,13 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
                   <button 
                     type="button" 
                     className="btn" 
-                    style={{ padding: '0.35rem 1rem', fontSize: '0.85rem', borderColor: '#38bdf8', color: '#38bdf8' }}
+                    style={{ padding: '0.35rem 1rem', fontSize: '0.85rem', borderColor: 'var(--primary)', color: 'var(--primary)' }}
                     onClick={() => {
-                      const input = document.getElementById('newCountryInput');
+                      const input = document.getElementById('newCityInput');
                       const val = input.value.trim();
-                      if (val && !countriesList.includes(val)) {
-                        setCountriesList([...countriesList, val]);
-                        setSelectedCountries([...selectedCountries, val]);
+                      if (val && !CitiesList.includes(val)) {
+                        setCitiesList([...CitiesList, val]);
+                        setSelectedCities([...selectedCities, val]);
                         input.value = '';
                       }
                     }}
@@ -909,3 +917,10 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
     </div>
   );
 }
+
+
+
+
+
+
+

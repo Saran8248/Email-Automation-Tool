@@ -24,6 +24,7 @@ const port = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Initialize Database
 initDb().then(() => {
@@ -129,7 +130,7 @@ app.get('/api/countries', async (req, res) => {
   try {
     const rows = await dbAll("SELECT DISTINCT country FROM contacts WHERE country IS NOT NULL AND country != ''");
     const dbCountries = rows.map(r => r.country.trim());
-    const defaultList = ['Germany', 'UAE', 'Netherlands', 'Australia'];
+    const defaultList = [];
     const merged = Array.from(new Set([...defaultList, ...dbCountries])).filter(Boolean);
     merged.sort();
     res.json(merged);
@@ -146,7 +147,18 @@ app.post('/api/parse-pdf', upload.single('file'), async (req, res) => {
     }
     const parser = new PDFParse({ data: req.file.buffer });
     const result = await parser.getText();
-    res.json({ success: true, text: result.text });
+    
+    // Save the original file to disk to attach later
+    const uploadsDir = path.join(__dirname, 'uploads');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir);
+    }
+    const safeName = req.file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const savedFilename = `${Date.now()}_${safeName}`;
+    const filePath = path.join(uploadsDir, savedFilename);
+    fs.writeFileSync(filePath, req.file.buffer);
+
+    res.json({ success: true, text: result.text, savedFilename });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -691,7 +703,8 @@ async function generateEmailContent(client, contact, settings) {
       .replace(/{candidate_email}/g, client.email || '')
       .replace(/{candidate_mobile}/g, client.mobile || '')
       .replace(/{industry}/g, contact.industry || 'Technology & Consulting')
-      .replace(/{country}/g, contact.country || '');
+      .replace(/{country}/g, contact.country || '')
+      .replace(/{city}/g, contact.country || '');
 
     // Cleanup any unreplaced {placeholder} tags so NO email contains raw curly braces
     result = result.replace(/\{[a-zA-Z0-9_]+\}/g, '');
@@ -849,14 +862,20 @@ async function sendRawEmail(to, subject, body, client) {
     </div>
   `;
 
-  // Generate binary PDF buffer for attachment
   const safeFilename = `${(client.name || 'Candidate').replace(/[^a-zA-Z0-9_-]/g, '_')}_Resume.pdf`;
   let pdfAttachmentBuffer = null;
-  try {
-    pdfAttachmentBuffer = await generatePdfBuffer(client.name || 'Candidate', client.resume_text);
-  } catch (pdfErr) {
-    console.error("Failed to generate PDF buffer, falling back to text:", pdfErr);
-    pdfAttachmentBuffer = Buffer.from(client.resume_text || `Resume for ${client.name}`);
+  
+  const uploadedFilePath = client.resume_filename ? path.join(__dirname, 'uploads', client.resume_filename) : null;
+  
+  if (uploadedFilePath && fs.existsSync(uploadedFilePath)) {
+    pdfAttachmentBuffer = fs.readFileSync(uploadedFilePath);
+  } else {
+    try {
+      pdfAttachmentBuffer = await generatePdfBuffer(client.name || 'Candidate', client.resume_text);
+    } catch (pdfErr) {
+      console.error("Failed to generate PDF buffer, falling back to text:", pdfErr);
+      pdfAttachmentBuffer = Buffer.from(client.resume_text || `Resume for ${client.name}`);
+    }
   }
 
   const mailOptions = {
@@ -1079,3 +1098,4 @@ app.use((err, req, res, next) => {
 app.listen(port, () => {
   console.log(`Email Automation Server is listening at http://localhost:${port}`);
 });
+

@@ -80,7 +80,7 @@ export default function Dashboard({ stats, logs, triggerCampaign, triggerInProgr
         </div>
       </div>
 
-      <div className="dashboard-row">
+      <div className="split-layout-65-35">
         <div className="card">
           <div className="card-header">
             <h3 className="card-title">Program Outreach Target Progress</h3>
@@ -93,7 +93,7 @@ export default function Dashboard({ stats, logs, triggerCampaign, triggerInProgr
                 <span style={{ fontSize: '1.5rem', fontWeight: 700 }}>{stats.sent}</span>
                 <span className="text-secondary" style={{ marginLeft: '0.5rem' }}>/ 1,200 emails</span>
               </div>
-              <span style={{ fontWeight: 600, color: 'var(--primary-light)' }}>
+              <span style={{ fontWeight: 600, color: 'var(--primary)' }}>
                 {Math.min(100, Math.round((stats.sent / 1200) * 100))}% Complete
               </span>
             </div>

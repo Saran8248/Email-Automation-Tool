@@ -1,18 +1,8 @@
 import React, { useState } from 'react';
 
-const INDUSTRIES_LIST = [
-  'E-commerce & Retail',
-  'Manufacturing & Automotive',
-  'Logistics & Supply Chain',
-  'Healthcare & Life Sciences',
-  'Telecom',
-  'FMCG & Consumer Goods',
-  'Energy & Utilities',
-  'Construction, Infrastructure & Real Estate',
-  'Technology & Consulting'
-];
+const INDUSTRIES_LIST = ['Technology & Consulting'];
 
-const COUNTRIES_LIST = ['Germany', 'UAE', 'Netherlands', 'Australia'];
+
 
 async function safeFetchJson(url, options = {}) {
   try {
@@ -45,27 +35,27 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
   const [isBulkOpen, setIsBulkOpen] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [editingContact, setEditingContact] = useState(null);
-  const [countriesList, setCountriesList] = useState(['Germany', 'UAE', 'Netherlands', 'Australia']);
+  const [CitiesList, setCitiesList] = useState([]);
 
   React.useEffect(() => {
-    fetchCountries();
+    fetchCities();
   }, [contacts]);
 
-  const fetchCountries = async () => {
+  const fetchCities = async () => {
     try {
       const data = await safeFetchJson('/api/countries');
       if (Array.isArray(data)) {
-        setCountriesList(data);
+        setCitiesList(data);
       }
     } catch (err) {
-      console.error('Failed to load countries:', err);
+      console.error('Failed to load Cities:', err);
     }
   };
 
   // Filter states
-  const [filterCountry, setFilterCountry] = useState('All');
-  const [filterIndustry, setFilterIndustry] = useState('All');
-  const [filterStatus, setFilterStatus] = useState('All');
+  const [filterCity, setFilterCity] = useState('');
+  const [filterIndustry, setFilterIndustry] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
 
   // Form states
   const [name, setName] = useState('');
@@ -73,7 +63,7 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
   const [company, setCompany] = useState('');
   const [role, setRole] = useState('');
   const [industry, setIndustry] = useState('');
-  const [country, setCountry] = useState('');
+  const [City, setCity] = useState('');
   const [status, setStatus] = useState('Active');
   
   // CSV / File Import State
@@ -109,7 +99,7 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
     setCompany('');
     setRole('');
     setIndustry('');
-    setCountry('');
+    setCity('');
     setStatus('Active');
     setEditingContact(null);
   };
@@ -123,7 +113,7 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
       const data = await safeFetchJson(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, company, role, industry, country, status })
+        body: JSON.stringify({ name, email, company, role, industry, country: City, status })
       });
       if (data.success) {
         setNotification({
@@ -148,7 +138,7 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
     setCompany(contact.company || '');
     setRole(contact.role || '');
     setIndustry(contact.industry || '');
-    setCountry(contact.country || '');
+    setCity(contact.country || '');
     setStatus(contact.status || 'Active');
     setIsAddOpen(true);
   };
@@ -273,124 +263,127 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
   };
 
   const filteredContacts = contacts.filter(c => {
-    if (filterCountry !== 'All' && c.country !== filterCountry) return false;
-    if (filterIndustry !== 'All' && c.industry !== filterIndustry) return false;
-    if (filterStatus !== 'All' && c.status !== filterStatus) return false;
+    if (filterCity && filterCity !== 'All' && c.country !== filterCity) return false;
+    if (filterIndustry && filterIndustry !== 'All' && c.industry !== filterIndustry) return false;
+    if (filterStatus && filterStatus !== 'All' && c.status !== filterStatus) return false;
     return true;
   });
 
   return (
-    <div>
-      <div className="card-header" style={{ marginBottom: '1.5rem' }}>
-        <h3 className="card-title">{filteredContacts.length} of {contacts.length} Contacts</h3>
-        <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <button className="btn" onClick={() => { resetForm(); setIsAddOpen(true); }}>
-            + Add Contact
-          </button>
-          <button className="btn btn-primary" onClick={() => setIsBulkOpen(true)}>
-            Bulk Upload CSV
-          </button>
+    <div className="split-layout-65-35">
+      {/* LEFT PANEL */}
+      <div>
+        <div className="card-header" style={{ marginBottom: '1.5rem' }}>
+          <h3 className="card-title">{filteredContacts.length} of {contacts.length} Contacts</h3>
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <button className="btn" onClick={() => { resetForm(); setIsAddOpen(true); setIsBulkOpen(false); }}>
+              + Add Contact
+            </button>
+            <button className="btn" onClick={() => { setIsBulkOpen(true); setIsAddOpen(false); }}>
+              Bulk Upload CSV
+            </button>
+          </div>
         </div>
-      </div>
 
-      {/* Filter Dropdowns at Top of Contacts Page */}
-      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap', backgroundColor: '#090f19', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', minWidth: '160px' }}>
-          <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Filter by Country</label>
-          <select className="form-select" value={filterCountry} onChange={e => setFilterCountry(e.target.value)} style={{ padding: '0.45rem', backgroundColor: '#050814', color: '#ffffff', border: '1px solid var(--border-color)' }}>
-            <option value="All">All Countries</option>
-            {countriesList.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
+        {/* Filter Dropdowns */}
+        <div className="table-toolbar">
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>City:</span>
+            <select className="form-select" value={filterCity} onChange={e => setFilterCity(e.target.value)} style={{ padding: '0.45rem' }}>
+              <option value="">All Cities</option>
+              {CitiesList.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Industry:</span>
+            <select className="form-select" value={filterIndustry} onChange={e => setFilterIndustry(e.target.value)} style={{ padding: '0.45rem' }}>
+              <option value="">All Industries</option>
+              {INDUSTRIES_LIST.map(ind => <option key={ind} value={ind}>{ind}</option>)}
+            </select>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Status:</span>
+            <select className="form-select" value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ padding: '0.45rem' }}>
+              <option value="All">All Statuses</option>
+              <option value="Active">Active</option>
+              <option value="Paused">Paused</option>
+            </select>
+          </div>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', minWidth: '200px' }}>
-          <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Filter by Industry</label>
-          <select className="form-select" value={filterIndustry} onChange={e => setFilterIndustry(e.target.value)} style={{ padding: '0.45rem', backgroundColor: '#050814', color: '#ffffff', border: '1px solid var(--border-color)' }}>
-            <option value="All">All Industries</option>
-            {INDUSTRIES_LIST.map(ind => <option key={ind} value={ind}>{ind}</option>)}
-          </select>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', minWidth: '130px' }}>
-          <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Filter by Status</label>
-          <select className="form-select" value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ padding: '0.45rem', backgroundColor: '#050814', color: '#ffffff', border: '1px solid var(--border-color)' }}>
-            <option value="All">All Statuses</option>
-            <option value="Active">Active</option>
-            <option value="Paused">Paused</option>
-          </select>
-        </div>
-      </div>
 
-      <div className="table-container">
-        <table className="custom-table">
-          <thead>
-            <tr>
-              <th>Contact Name</th>
-              <th>Email</th>
-              <th>Company</th>
-              <th>Industry</th>
-              <th>Country</th>
-              <th>Status</th>
-              <th style={{ textAlign: 'right' }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredContacts.length === 0 ? (
+        <div className="table-container">
+          <table className="custom-table">
+            <thead>
               <tr>
-                <td colSpan="7" style={{ textAlign: 'center', padding: '3rem 0', color: 'var(--text-muted)' }}>
-                  No contacts match your filter criteria.
-                </td>
+                <th>Contact Name</th>
+                <th>Email</th>
+                <th>Company</th>
+                <th>Industry</th>
+                <th>City</th>
+                <th>Status</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
-            ) : (
-              filteredContacts.map((c) => (
-                <tr key={c.id}>
-                  <td style={{ fontWeight: 600 }}>{c.name}</td>
-                  <td>{c.email}</td>
-                  <td>{c.company || '—'}</td>
-                  <td>
-                    {c.industry ? (
-                      <span className="badge badge-warning" style={{ background: 'rgba(124,58,237,0.1)', color: 'var(--primary-light)', textTransform: 'none' }}>
-                        {c.industry}
-                      </span>
-                    ) : '—'}
-                  </td>
-                  <td>{c.country || '—'}</td>
-                  <td>
-                    <span className={`badge ${c.status === 'Active' ? 'badge-success' : 'badge-danger'}`}>
-                      {c.status}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="actions-row" style={{ justifyContent: 'flex-end' }}>
-                      <button className="icon-btn" title="Generate & Preview Email" onClick={() => triggerPreview(c)}>
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" style={{ width: 16, height: 16 }}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                        </svg>
-                      </button>
-                      <button className="icon-btn" title="Edit Contact" onClick={() => startEdit(c)}>
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" style={{ width: 16, height: 16 }}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
-                        </svg>
-                      </button>
-                      <button className="icon-btn delete" title="Delete Contact" onClick={() => handleDelete(c.id)}>
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" style={{ width: 16, height: 16 }}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-                        </svg>
-                      </button>
-                    </div>
+            </thead>
+            <tbody>
+              {filteredContacts.length === 0 ? (
+                <tr>
+                  <td colSpan="7" style={{ textAlign: 'center', padding: '3rem 0', color: 'var(--text-muted)' }}>
+                    No contacts match your filter criteria.
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                filteredContacts.map((c) => (
+                  <tr key={c.id}>
+                    <td style={{ fontWeight: 500 }}>{c.name}</td>
+                    <td>{c.email}</td>
+                    <td>{c.company || '—'}</td>
+                    <td>
+                      {c.industry ? (
+                        <span className="badge badge-neutral">
+                          {c.industry}
+                        </span>
+                      ) : '—'}
+                    </td>
+                    <td>{c.country || '—'}</td>
+                    <td>
+                      <span className={`badge ${c.status === 'Active' ? 'badge-success' : 'badge-danger'}`}>
+                        {c.status}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="actions-row" style={{ justifyContent: 'flex-end' }}>
+                        <button className="icon-btn" title="Generate & Preview Email" onClick={() => triggerPreview(c)}>
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" style={{ width: 16, height: 16 }}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                          </svg>
+                        </button>
+                        <button className="icon-btn" title="Edit Contact" onClick={() => { startEdit(c); setIsAddOpen(true); setIsBulkOpen(false); }}>
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" style={{ width: 16, height: 16 }}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
+                          </svg>
+                        </button>
+                        <button className="icon-btn delete" title="Delete Contact" onClick={() => handleDelete(c.id)}>
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" style={{ width: 16, height: 16 }}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                          </svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* Add / Edit Contact Modal */}
-      {isAddOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h4 className="modal-title">{editingContact ? 'Edit Contact' : 'Add New Contact'}</h4>
+      {/* RIGHT PANEL */}
+      <div>
+        {isAddOpen && (
+          <div className="card">
+            <div className="card-header">
+              <h4 className="card-title">{editingContact ? 'Edit Contact' : 'Add New Contact'}</h4>
               <button className="icon-btn" onClick={() => setIsAddOpen(false)}>&times;</button>
             </div>
             <form onSubmit={handleAddOrEdit}>
@@ -402,35 +395,31 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
                 <label>Email Address *</label>
                 <input type="email" required className="form-input" value={email} onChange={e => setEmail(e.target.value)} placeholder="e.g. sarah.jenkins@company.com" />
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div className="form-group">
-                  <label>Company</label>
-                  <input type="text" className="form-input" value={company} onChange={e => setCompany(e.target.value)} placeholder="e.g. Stripe" />
-                </div>
-                <div className="form-group">
-                  <label>Target Role</label>
-                  <input type="text" className="form-input" value={role} onChange={e => setRole(e.target.value)} placeholder="e.g. Software Engineer" />
-                </div>
+              <div className="form-group">
+                <label>Company</label>
+                <input type="text" className="form-input" value={company} onChange={e => setCompany(e.target.value)} placeholder="e.g. Stripe" />
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div className="form-group">
-                  <label>Industry</label>
-                  <select className="form-select" value={industry} onChange={e => setIndustry(e.target.value)}>
-                    <option value="">-- Select Industry --</option>
-                    {INDUSTRIES_LIST.map(ind => (
-                      <option key={ind} value={ind}>{ind}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label>Country</label>
-                  <select className="form-select" value={country} onChange={e => setCountry(e.target.value)}>
-                    <option value="">-- Select Country --</option>
-                    {countriesList.map(c => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                </div>
+              <div className="form-group">
+                <label>Target Role</label>
+                <input type="text" className="form-input" value={role} onChange={e => setRole(e.target.value)} placeholder="e.g. Software Engineer" />
+              </div>
+              <div className="form-group">
+                <label>Industry</label>
+                <select className="form-select" value={industry} onChange={e => setIndustry(e.target.value)}>
+                  <option value="">-- Select Industry --</option>
+                  {INDUSTRIES_LIST.map(ind => (
+                    <option key={ind} value={ind}>{ind}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>City</label>
+                <select className="form-select" value={City} onChange={e => setCity(e.target.value)}>
+                  <option value="">-- Select City --</option>
+                  {CitiesList.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
               </div>
               <div className="form-group">
                 <label>Outreach Status</label>
@@ -439,32 +428,29 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
                   <option value="Paused">Paused</option>
                 </select>
               </div>
-              <div className="modal-footer">
+              <div className="flex-row-between" style={{ marginTop: '1.5rem' }}>
                 <button type="button" className="btn" onClick={() => setIsAddOpen(false)}>Cancel</button>
                 <button type="submit" className="btn btn-primary">Save Contact</button>
               </div>
             </form>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Bulk Upload Modal */}
-      {isBulkOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '650px' }}>
-            <div className="modal-header" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
-              <h4 className="modal-title" style={{ fontSize: '1.5rem', fontWeight: '700' }}>Upload HR CSV File</h4>
+        {isBulkOpen && (
+          <div className="card">
+            <div className="card-header" style={{ marginBottom: '1rem' }}>
+              <h4 className="card-title">Upload HR CSV File</h4>
               <button className="icon-btn" onClick={() => setIsBulkOpen(false)}>&times;</button>
             </div>
             
-            <div style={{ marginTop: '1.5rem' }}>
-              <p className="page-subtitle" style={{ fontSize: '1rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+            <div>
+              <p className="page-subtitle" style={{ marginBottom: '1rem' }}>
                 Select or drop your <strong>.csv</strong> file below. Auto-detected headers:
               </p>
               
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
-                {['name', 'email', 'company', 'title', 'industry', 'country'].map(h => (
-                  <span key={h} className="badge" style={{ backgroundColor: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', padding: '0.4rem 0.8rem', fontSize: '0.85rem', textTransform: 'none', border: '1px solid rgba(56, 189, 248, 0.3)' }}>
+                {['name', 'email', 'company', 'title', 'industry', 'City'].map(h => (
+                  <span key={h} className="badge badge-neutral">
                     {h}
                   </span>
                 ))}
@@ -472,14 +458,14 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
 
               <div 
                 style={{
-                  border: '2px dashed #38bdf8',
-                  borderRadius: '12px',
-                  padding: '2.5rem 1.5rem',
+                  border: '2px dashed var(--border-color)',
+                  borderRadius: '8px',
+                  padding: '2rem 1rem',
                   textAlign: 'center',
                   cursor: 'pointer',
-                  backgroundColor: 'rgba(15, 23, 42, 0.7)',
+                  backgroundColor: 'var(--bg-main)',
                   transition: 'border-color 0.2s',
-                  marginBottom: '1rem'
+                  marginBottom: '1.5rem'
                 }}
                 onClick={() => document.getElementById('csvFileInput').click()}
                 onDragOver={e => e.preventDefault()}
@@ -502,19 +488,19 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
                     }
                   }}
                 />
-                <span style={{ fontSize: '2.5rem', display: 'block', marginBottom: '0.5rem' }}>📊</span>
-                <span style={{ color: 'var(--text-secondary)', fontSize: '1rem', fontWeight: '500' }}>
-                  {filename ? `Selected CSV File: ${filename}` : 'Click to select a .csv file (or drag & drop here)'}
+                <span style={{ fontSize: '2rem', display: 'block', marginBottom: '0.5rem' }}>📊</span>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: '500' }}>
+                  {filename ? `Selected: ${filename}` : 'Click or drop .csv here'}
                 </span>
                 {csvText && !csvText.startsWith('Binary file') && (
-                  <span style={{ display: 'block', fontSize: '0.85rem', color: 'var(--success)', marginTop: '0.5rem', fontWeight: '600' }}>
-                    CSV file loaded successfully ({csvText.split('\n').length} lines) &bull; Ready to import
+                  <span style={{ display: 'block', fontSize: '0.8rem', color: 'var(--success)', marginTop: '0.5rem', fontWeight: '500' }}>
+                    CSV loaded ({csvText.split('\n').length} lines)
                   </span>
                 )}
               </div>
 
               <div className="form-group">
-                <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>OR PASTE CSV CONTENT DIRECTLY:</label>
+                <label>OR PASTE CSV CONTENT DIRECTLY:</label>
                 <textarea 
                   className="form-textarea"
                   value={csvText.startsWith('Binary file') ? '' : csvText}
@@ -523,13 +509,12 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
                     setSelectedFile(null);
                     setFilename('Pasted CSV text');
                   }}
-                  placeholder="Name,Email,Company,Role,Industry,Country&#10;Sarah,sarah@corp.com,TechCorp,Recruiter,Technology,Germany"
-                  style={{ minHeight: '100px', fontSize: '0.85rem', fontFamily: 'monospace' }}
+                  placeholder="Name,Email,Company,Role,Industry,City&#10;Sarah,sarah@corp.com,TechCorp,Recruiter,Technology,Germany"
                 />
               </div>
             </div>
 
-            <div className="modal-footer" style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1rem', marginTop: '2rem' }}>
+            <div className="flex-row-between" style={{ marginTop: '1.5rem' }}>
               <button type="button" className="btn" onClick={() => setIsBulkOpen(false)}>Close</button>
               <button 
                 type="button" 
@@ -541,8 +526,17 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {!isAddOpen && !isBulkOpen && (
+          <div className="card empty-state">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.109A2.25 2.25 0 0 1 12.75 21.5h-1.5a2.25 2.25 0 0 1-2.25-2.263V19.13m4.5-3.07a9.3 9.3 0 0 0-4.5-1.229 9.302 9.302 0 0 0-4.5 1.23M13.5 8.25a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0ZM5.25 8.25a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
+            </svg>
+            <p>Select an action to manage contacts.</p>
+          </div>
+        )}
+      </div>
 
       {/* AI Preview Modal */}
       {isPreviewOpen && (
@@ -608,3 +602,7 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
     </div>
   );
 }
+
+
+
+

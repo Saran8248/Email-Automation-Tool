@@ -38,78 +38,71 @@ export default function Logs({ logs, fetchLogs, setNotification }) {
   };
 
   return (
-    <div>
-      <div className="card-header" style={{ marginBottom: '1.5rem' }}>
-        <h3 className="card-title">Outreach Log History</h3>
-        {logs.length > 0 && (
-          <button className="btn btn-danger" onClick={handleClearLogs}>
-            Clear History Logs
-          </button>
-        )}
-      </div>
+    <div className="split-layout-65-35">
+      <div>
+        <div className="card-header" style={{ marginBottom: '1.5rem' }}>
+          <h3 className="card-title">Outreach Log History</h3>
+          {logs.length > 0 && (
+            <button className="btn btn-danger" onClick={handleClearLogs}>
+              Clear History Logs
+            </button>
+          )}
+        </div>
 
-      <div className="table-container">
-        <table className="custom-table">
-          <thead>
-            <tr>
-              <th>Sent Date</th>
-              <th>Recipient Name</th>
-              <th>Email Address</th>
-              <th>Company</th>
-              <th>Subject</th>
-              <th>Status</th>
-              <th style={{ textAlign: 'right' }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {logs.length === 0 ? (
+        <div className="table-container">
+          <table className="custom-table">
+            <thead>
               <tr>
-                <td colSpan="7" style={{ textAlign: 'center', padding: '3rem 0', color: 'var(--text-muted)' }}>
-                  No emails have been sent out yet. Start a campaign or send a manual email to see logs.
-                </td>
+                <th>Sent Date</th>
+                <th>Recipient Name</th>
+                <th>Email Address</th>
+                <th>Company</th>
+                <th>Status</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
-            ) : (
-              logs.map((log) => (
-                <tr key={log.id}>
-                  <td>{new Date(log.sent_at).toLocaleString()}</td>
-                  <td style={{ fontWeight: 600 }}>{log.contact_name}</td>
-                  <td>{log.contact_email}</td>
-                  <td>{log.company || '—'}</td>
-                  <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {log.subject || '—'}
-                  </td>
-                  <td>
-                    <span className={`badge ${log.status === 'Sent' ? 'badge-success' : 'badge-danger'}`}>
-                      {log.status}
-                    </span>
-                    {log.error_message && (
-                      <div className="text-secondary" style={{ fontSize: '0.75rem', marginTop: '0.25rem', color: 'var(--danger)' }}>
-                        {log.error_message}
-                      </div>
-                    )}
-                  </td>
-                  <td style={{ textAlign: 'right' }}>
-                    <button className="btn btn-sm" onClick={() => setSelectedLog(log)}>
-                      View Body
-                    </button>
+            </thead>
+            <tbody>
+              {logs.length === 0 ? (
+                <tr>
+                  <td colSpan="6" style={{ textAlign: 'center', padding: '3rem 0', color: 'var(--text-muted)' }}>
+                    No emails have been sent out yet. Start a campaign or send a manual email to see logs.
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                logs.map((log) => (
+                  <tr key={log.id}>
+                    <td>{new Date(log.sent_at).toLocaleString()}</td>
+                    <td style={{ fontWeight: 500 }}>{log.contact_name}</td>
+                    <td>{log.contact_email}</td>
+                    <td>{log.company || '—'}</td>
+                    <td>
+                      <span className={`badge ${log.status === 'Sent' ? 'badge-success' : 'badge-danger'}`}>
+                        {log.status}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button className="btn btn-sm" onClick={() => setSelectedLog(log)}>
+                        View Details
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {selectedLog && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '650px' }}>
-            <div className="modal-header">
-              <h4 className="modal-title">Sent Email Details</h4>
+      <div>
+        {selectedLog ? (
+          <div className="card">
+            <div className="card-header">
+              <h4 className="card-title">Sent Email Details</h4>
               <button className="icon-btn" onClick={() => setSelectedLog(null)}>&times;</button>
             </div>
             <div>
               <p className="page-subtitle" style={{ marginBottom: '1rem' }}>
-                Recipient: <strong>{selectedLog.contact_name}</strong> ({selectedLog.contact_email}) &bull; {selectedLog.company}
+                Recipient: <strong>{selectedLog.contact_name}</strong> ({selectedLog.contact_email})
               </p>
               <div className="form-group">
                 <label>Subject Line</label>
@@ -120,10 +113,9 @@ export default function Logs({ logs, fetchLogs, setNotification }) {
                 <div 
                   className="preview-box" 
                   style={{ 
-                    maxHeight: '300px', 
+                    maxHeight: '400px', 
                     overflowY: 'auto', 
                     whiteSpace: 'pre-wrap', 
-                    fontFamily: 'var(--font-body)', 
                     fontSize: '0.9rem',
                     lineHeight: '1.6' 
                   }}
@@ -131,13 +123,17 @@ export default function Logs({ logs, fetchLogs, setNotification }) {
                   {selectedLog.body || 'No content logged.'}
                 </div>
               </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-primary" onClick={() => setSelectedLog(null)}>Close</button>
-              </div>
             </div>
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="card empty-state">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+            </svg>
+            <p>Select a log entry to view full email details.</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

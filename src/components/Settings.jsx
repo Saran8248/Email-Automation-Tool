@@ -95,14 +95,14 @@ export default function Settings({ setNotification }) {
   };
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1.5rem' }}>
+    <div className="split-layout-65-35">
       <div className="card">
         <div className="card-header" style={{ marginBottom: '1.5rem' }}>
           <h3 className="card-title">OutreachSphere Configuration</h3>
         </div>
 
         <form onSubmit={handleSave}>
-          <h4 style={{ color: 'var(--primary-light)', fontSize: '0.9rem', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
+          <h4 style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
             AI Engine - Personalization Settings
           </h4>
           
@@ -120,7 +120,7 @@ export default function Settings({ setNotification }) {
             </span>
           </div>
 
-          <h4 style={{ color: 'var(--primary-light)', fontSize: '0.9rem', margin: '2rem 0 1rem 0', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
+          <h4 style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: '2rem 0 1rem 0', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
             SMTP Server Configuration
           </h4>
 
@@ -184,7 +184,7 @@ export default function Settings({ setNotification }) {
             <button type="submit" className="btn btn-primary" disabled={saving}>
               {saving ? 'Saving Config...' : 'Save Configuration'}
             </button>
-            <button type="button" className="btn" onClick={testSmtpConnection} disabled={testingSmtp}>
+            <button type="button" className="btn" onClick={handleTestSMTP} disabled={testingSmtp}>
               {testingSmtp ? 'Testing SMTP...' : 'Send Test Email'}
             </button>
           </div>
@@ -254,7 +254,7 @@ export default function Settings({ setNotification }) {
         <div style={{ marginTop: '2rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
           <button 
             type="button" 
-            className="btn btn-primary" 
+            className="btn" 
             style={{ width: '100%', justifyContent: 'center' }}
             onClick={() => handleSave(null)}
           >
