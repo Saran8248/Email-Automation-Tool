@@ -530,9 +530,13 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
                     </td>
                     <td>
                       {parsedCities.length > 0 ? (
-                        <span className="badge badge-warning">
-                          {parsedCities.join(', ')}
-                        </span>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                          {parsedCities.map((city, index) => (
+                            <span key={index} className="badge badge-warning" style={{ whiteSpace: 'nowrap' }}>
+                              {city}
+                            </span>
+                          ))}
+                        </div>
                       ) : 'All Cities'}
                     </td>
                     <td>{c.mobile || '—'}</td>

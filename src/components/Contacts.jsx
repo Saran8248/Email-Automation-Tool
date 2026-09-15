@@ -262,10 +262,20 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
     }
   };
 
+  const [searchQuery, setSearchQuery] = useState('');
+
   const filteredContacts = contacts.filter(c => {
     if (filterCity && filterCity !== 'All' && c.country !== filterCity) return false;
     if (filterIndustry && filterIndustry !== 'All' && c.industry !== filterIndustry) return false;
     if (filterStatus && filterStatus !== 'All' && c.status !== filterStatus) return false;
+    
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      const matchesName = c.name && c.name.toLowerCase().includes(q);
+      const matchesEmail = c.email && c.email.toLowerCase().includes(q);
+      if (!matchesName && !matchesEmail) return false;
+    }
+    
     return true;
   });
 
@@ -285,29 +295,41 @@ export default function Contacts({ contacts, fetchContacts, setNotification, cli
           </div>
         </div>
 
-        {/* Filter Dropdowns */}
-        <div className="table-toolbar">
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>City:</span>
-            <select className="form-select" value={filterCity} onChange={e => setFilterCity(e.target.value)} style={{ padding: '0.45rem' }}>
-              <option value="">All Cities</option>
-              {CitiesList.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+        {/* Filter Dropdowns & Search */}
+        <div className="table-toolbar" style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>City:</span>
+              <select className="form-select" value={filterCity} onChange={e => setFilterCity(e.target.value)} style={{ padding: '0.45rem' }}>
+                <option value="">All Cities</option>
+                {CitiesList.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Industry:</span>
+              <select className="form-select" value={filterIndustry} onChange={e => setFilterIndustry(e.target.value)} style={{ padding: '0.45rem' }}>
+                <option value="">All Industries</option>
+                {INDUSTRIES_LIST.map(ind => <option key={ind} value={ind}>{ind}</option>)}
+              </select>
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Status:</span>
+              <select className="form-select" value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ padding: '0.45rem' }}>
+                <option value="All">All Statuses</option>
+                <option value="Active">Active</option>
+                <option value="Paused">Paused</option>
+              </select>
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Industry:</span>
-            <select className="form-select" value={filterIndustry} onChange={e => setFilterIndustry(e.target.value)} style={{ padding: '0.45rem' }}>
-              <option value="">All Industries</option>
-              {INDUSTRIES_LIST.map(ind => <option key={ind} value={ind}>{ind}</option>)}
-            </select>
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Status:</span>
-            <select className="form-select" value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ padding: '0.45rem' }}>
-              <option value="All">All Statuses</option>
-              <option value="Active">Active</option>
-              <option value="Paused">Paused</option>
-            </select>
+          <div style={{ flex: '0 1 250px' }}>
+            <input 
+              type="text" 
+              className="form-input" 
+              placeholder="Search by name or email..." 
+              value={searchQuery} 
+              onChange={e => setSearchQuery(e.target.value)}
+              style={{ width: '100%', padding: '0.45rem 0.75rem' }}
+            />
           </div>
         </div>
 
