@@ -847,7 +847,7 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
               </div>
 
               <div className="form-group" style={{ marginTop: '1.5rem' }}>
-                <label style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>RESUME DETAILS (PLAIN TEXT)</label>
+                <label style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>RESUME FILE</label>
                 <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '0.5rem' }}>
                   <input 
                     type="file" 
@@ -858,17 +858,27 @@ Experience: 2+ Years engineering corporate applications and cloud integrations.`
                     onChange={e => handleResumeFileUpload(e.target.files[0])}
                   />
                   <button type="button" className="btn btn-sm" onClick={() => document.getElementById('resumeTextInput').click()}>
-                    📎 Choose .txt / .md / .pdf Resume File
+                    📎 Choose .pdf Resume File
                   </button>
-                  <span className="page-subtitle" style={{ fontSize: '0.8rem' }}>or paste details directly below:</span>
+                  <span className="page-subtitle" style={{ fontSize: '0.8rem' }}>
+                    {resumeFilename ? `Uploaded: ${resumeFilename}` : 'or paste text details below:'}
+                  </span>
                 </div>
-                <textarea
-                  className="form-textarea"
-                  value={resumeText}
-                  onChange={e => setResumeText(e.target.value)}
-                  placeholder="Paste work experience, skills, and summary details here..."
-                  style={{ minHeight: '150px', fontSize: '0.85rem' }}
-                />
+                {resumeFilename ? (
+                  <iframe 
+                    src={`/uploads/${resumeFilename}`} 
+                    style={{ width: '100%', height: '350px', border: '1px solid var(--border-color)', borderRadius: '8px', marginTop: '0.5rem' }} 
+                    title="Resume PDF"
+                  />
+                ) : (
+                  <textarea
+                    className="form-textarea"
+                    value={resumeText}
+                    onChange={e => setResumeText(e.target.value)}
+                    placeholder="Paste work experience, skills, and summary details here..."
+                    style={{ minHeight: '150px', fontSize: '0.85rem' }}
+                  />
+                )}
               </div>
               <div className="form-group" style={{ marginTop: '1.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
